@@ -198,10 +198,10 @@ export default function ScanReceipt() {
   // QR/Barcode scan handler
   const handleQRScan = (decodedText: string) => {
     setQrResult(decodedText);
-    toast.success('Code scanned!');
+    toast.success('Code scanned successfully!');
 
-    // Parse UPI links
-    if (decodedText.startsWith('upi://pay')) {
+    // Intelligent AI-like pattern detection
+    if (decodedText.toLowerCase().startsWith('upi://pay')) {
       try {
         const url = new URL(decodedText);
         const pa = url.searchParams.get('pa') || '';
@@ -215,18 +215,50 @@ export default function ScanReceipt() {
           paymentMethod: 'UPI',
           date: new Date().toISOString().split('T')[0],
         });
-        toast.success(`UPI payment detected: ${pn || pa} ₹${am}`);
+        toast.success(`UPI Payment Detected: ${pn || pa} (₹${am || 'Various'})`);
       } catch { /* not a valid URL */ }
+    } else if (decodedText.toLowerCase().startsWith('wifi:')) {
+      // Parse WiFi QR Codes: WIFI:T:WPA;P:password;S:SSID;H:false;
+      const ssidMatch = decodedText.match(/S:([^;]+);/);
+      const ssid = ssidMatch ? ssidMatch[1] : 'Unknown Network';
+      
+      setFormData({
+        description: `WiFi Hotspot: ${ssid}`,
+        amount: '0',
+        category: 'Bills & Utilities',
+        paymentMethod: 'Cash',
+        date: new Date().toISOString().split('T')[0],
+      });
+      toast.info(`WiFi Network Detected: ${ssid}`);
+    } else if (decodedText.toLowerCase().startsWith('vcard:') || decodedText.toLowerCase().startsWith('mecard:')) {
+      setFormData({
+        description: `Contact Sync / Business Card`,
+        amount: '0',
+        category: 'Others',
+        paymentMethod: 'Cash',
+        date: new Date().toISOString().split('T')[0],
+      });
+      toast.info('Contact Card Detected');
     } else if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
       // URL: offer to open
       window.open(decodedText, '_blank');
-      toast.success('Opening URL in new tab');
+      toast.success('Navigated to URL');
+    } else {
+      // General Barcode / Product Code
+      setFormData({
+        description: `Scanned Item/Product: ${decodedText.slice(0, 20)}`,
+        amount: '',
+        category: 'Shopping',
+        paymentMethod: 'Cash',
+        date: new Date().toISOString().split('T')[0],
+      });
+      toast.success('Product/General Barcode Detected');
     }
 
     saveNotification({
       type: 'scan_complete',
-      title: '🔍 QR/Barcode Scanned',
-      message: decodedText.length > 60 ? decodedText.slice(0, 60) + '...' : decodedText,
+      title: '🔍 QR/Barcode Analyzed',
+      message: decodedText.length > 50 ? decodedText.slice(0, 50) + '...' : decodedText,
     });
   };
 
