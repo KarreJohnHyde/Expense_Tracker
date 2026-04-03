@@ -11,9 +11,10 @@ import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Search, FileText, FileSpreadsheet, Sparkles, Calendar } from 'lucide-react';
+import { Search, FileText, FileSpreadsheet, Sparkles, Calendar, Camera } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/card';
 import { auth } from '../lib/auth';
+import { useNavigate } from 'react-router';
 
 interface Expense {
   id: string;
@@ -36,6 +37,7 @@ export default function Dashboard() {
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const [voicePrefillData, setVoicePrefillData] = useState<any>(null);
 
+  const navigate = useNavigate();
   const user = auth.getCurrentUser();
   const now = new Date();
   const greeting = now.getHours() < 12 ? 'Good Morning' : now.getHours() < 17 ? 'Good Afternoon' : 'Good Evening';
@@ -213,6 +215,10 @@ export default function Dashboard() {
         <Button variant="outline" size="sm" onClick={exportToJSON} className="card-hover">
           <FileText className="size-4 mr-2" />
           Export JSON
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => navigate('/scan-receipt')} className="card-hover">
+          <Camera className="size-4 mr-2" />
+          Scan Receipt
         </Button>
       </div>
 

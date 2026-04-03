@@ -5,15 +5,13 @@ import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
 import { 
   ShoppingBag, Utensils, Car, Zap, Film, Heart, BookOpen, 
-  MoreHorizontal, Trash2, Edit 
+  Trash2, Edit 
 } from 'lucide-react';
 import { format } from 'date-fns';
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from './ui/dropdown-menu';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { useCurrency } from '../lib/currency';
+import { AddExpenseDialog } from './AddExpenseDialog';
 
 interface Expense {
   id: string;
@@ -59,6 +57,8 @@ const getCategoryColor = (category: string) => {
 
 export function ExpenseList({ expenses, onExpenseDeleted }: ExpenseListProps) {
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
   const { formatCurrency } = useCurrency();
 
   const handleDelete = async (id: string) => {
@@ -73,6 +73,11 @@ export function ExpenseList({ expenses, onExpenseDeleted }: ExpenseListProps) {
     } finally {
       setDeleting(null);
     }
+  };
+
+  const openEdit = (expense: Expense) => {
+    setEditingExpense(expense);
+    setEditOpen(true);
   };
 
   if (expenses.length === 0) {
@@ -144,25 +149,27 @@ export function ExpenseList({ expenses, onExpenseDeleted }: ExpenseListProps) {
                       )}
                     </div>
                     
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="size-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 data-[state=open]:opacity-100">
-                          <MoreHorizontal className="size-4" />
-                          <span className="sr-only">Open menu</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-[160px] p-2 rounded-xl">
-                        <DropdownMenuItem className="gap-2 cursor-pointer font-medium p-2">
-                          <Edit className="size-4 text-blue-500" /> Edit Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          className="gap-2 text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer p-2 font-medium"
-                          onClick={() => handleDelete(expense.id)}
-                        >
-                          <Trash2 className="size-4" /> Delete Expense
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                        onClick={() => openEdit(expense)}
+                        aria-label="Edit expense"
+                      >
+                        <Edit className="size-3.5" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 p-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                        onClick={() => handleDelete(expense.id)}
+                        aria-label="Delete expense"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               );
@@ -170,6 +177,22 @@ export function ExpenseList({ expenses, onExpenseDeleted }: ExpenseListProps) {
           </div>
         </ScrollArea>
       </CardContent>
+
+      {editingExpense && (
+        <AddExpenseDialog
+          mode="edit"
+          expenseId={editingExpense.id}
+          initialData={editingExpense}
+          showTrigger={false}
+          isOpen={editOpen}
+          onOpenChange={(next) => {
+            setEditOpen(next);
+            if (!next) setEditingExpense(null);
+          }}
+          onExpenseAdded={onExpenseDeleted}
+          onExpenseUpdated={onExpenseDeleted}
+        />
+      )}
     </Card>
   );
 }

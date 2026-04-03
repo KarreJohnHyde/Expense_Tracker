@@ -2,6 +2,7 @@
  * Live Forex Rates Engine
  * Fetches real exchange rates from ExchangeRate-API and computes forex pairs.
  */
+import { fetchQuotes, getMarketStatus } from './marketData';
 
 export interface ForexPair {
   id: string;
@@ -24,7 +25,7 @@ interface ForexCache {
 
 const FOREX_CACHE_KEY = 'forex:rates_cache';
 const FOREX_PREV_KEY = 'forex:prev_rates';
-const FOREX_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const FOREX_CACHE_TTL = 30 * 1000; // 30 seconds
 
 const PAIR_DEFINITIONS = [
   { symbol: 'EUR/USD', name: 'Euro / US Dollar', base: 'EUR', quote: 'USD' },
@@ -102,10 +103,50 @@ export async function fetchForexPairs(): Promise<ForexPair[]> {
   const cached = getCachedForex();
   if (cached) return cached.pairs;
 
-  // Fetch live rates
+  const marketStatus = getMarketStatus();
+  if (marketStatus.configured) {
+    try {
+      const symbols = PAIR_DEFINITIONS.map(def => def.symbol);
+      const quotes = await fetchQuotes(symbols);
+      const now = new Date().toISOString();
+
+      const pairs: ForexPair[] = PAIR_DEFINITIONS.map((def, i) => {
+        const quote = quotes[def.symbol] || quotes[def.symbol.replace('/', '')];
+        const rate = quote?.price || 0;
+        const change = quote?.change ?? 0;
+        const changePercent = quote?.changePercent ?? 0;
+        const high24h = quote?.high ?? rate;
+        const low24h = quote?.low ?? rate;
+
+        return {
+          id: String(i + 1),
+          symbol: def.symbol,
+          name: def.name,
+          rate: parseFloat(rate.toFixed(4)),
+          change: parseFloat(change.toFixed(4)),
+          changePercent: parseFloat(changePercent.toFixed(2)),
+          high24h: parseFloat(high24h.toFixed(4)),
+          low24h: parseFloat(low24h.toFixed(4)),
+          volume: quote?.volume ?? 0,
+          lastUpdated: quote?.datetime || now,
+        };
+      });
+
+      const cache: ForexCache = {
+        pairs,
+        rawRates: {},
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(FOREX_CACHE_KEY, JSON.stringify(cache));
+      return pairs;
+    } catch {
+      // fall through to fallback
+    }
+  }
+
+  // Fallback: ExchangeRate-API
   const usdRates = await fetchUSDRates();
   if (!usdRates) {
-    // If we have stale cache, return it
     try {
       const stale = localStorage.getItem(FOREX_CACHE_KEY);
       if (stale) return JSON.parse(stale).pairs;
@@ -122,12 +163,10 @@ export async function fetchForexPairs(): Promise<ForexPair[]> {
     const change = rate - prevRate;
     const changePercent = prevRate !== 0 ? (change / prevRate) * 100 : 0;
 
-    // Simulate 24h high/low based on small spread (API doesn't provide these)
     const spread = rate * 0.003;
     const high24h = rate + spread * (0.5 + Math.random() * 0.5);
     const low24h = rate - spread * (0.5 + Math.random() * 0.5);
 
-    // Simulated volume (API doesn't provide volume)
     const volumes = [1250, 980, 1450, 850, 720, 650, 580, 420, 760, 540];
     const volume = (volumes[i] || 500) * 1000000;
 
@@ -145,12 +184,10 @@ export async function fetchForexPairs(): Promise<ForexPair[]> {
     };
   });
 
-  // Save current rates as previous for next comparison
   const newPrevRates: Record<string, number> = {};
   pairs.forEach((p: ForexPair) => { newPrevRates[p.symbol] = p.rate; });
   savePreviousRates(newPrevRates);
 
-  // Cache the result
   const cache: ForexCache = { pairs, rawRates: usdRates, timestamp: Date.now() };
   localStorage.setItem(FOREX_CACHE_KEY, JSON.stringify(cache));
 
@@ -165,7 +202,20 @@ export async function convertCurrency(
   to: string,
   amount: number
 ): Promise<number> {
-  // Try cache first
+  const marketStatus = getMarketStatus();
+  if (marketStatus.configured) {
+    try {
+      const symbol = `${from}/${to}`;
+      const quote = (await fetchQuotes([symbol]))[symbol];
+      if (quote?.price) {
+        return amount * quote.price;
+      }
+    } catch {
+      // fall back
+    }
+  }
+
+  // Fallback: ExchangeRate-API
   const cached = getCachedForex();
   let usdRates = cached?.rawRates;
 
@@ -179,7 +229,6 @@ export async function convertCurrency(
   if (to === 'USD') {
     return amount / (usdRates[from] || 1);
   }
-  // Cross conversion: from -> USD -> to
   const inUSD = amount / (usdRates[from] || 1);
   return inUSD * (usdRates[to] || 1);
 }

@@ -18,7 +18,7 @@ import {
 import { parseMultipleSMS, ParsedTransaction } from '../lib/smsPatterns';
 import { saveWalletTransaction, WalletName, WALLET_LIST } from '../lib/wallets';
 import { useCurrency } from '../lib/currency';
-import { saveNotification, sendBrowserNotification } from '../lib/notifications';
+import { notifyUser } from '../lib/notifications';
 
 export default function SMSParser() {
   const { formatCurrency } = useCurrency();
@@ -66,15 +66,13 @@ export default function SMSParser() {
     setSaved((prev: Set<number>) => new Set(prev).add(index));
 
     // Fire notification
-    saveNotification({
+    notifyUser({
       type: 'sms_transaction',
       title: `💳 SMS ${txn.type === 'credit' ? 'Credit' : 'Debit'}: ${txn.bank}`,
       message: `₹${txn.amount.toLocaleString()} ${txn.type === 'credit' ? 'credited' : 'debited'}${txn.accountLast4 ? ` (A/c ${txn.accountLast4})` : ''}`,
+      desktopTitle: `${txn.type === 'credit' ? 'Credit' : 'Debit'}: ${txn.bank}`,
+      desktopBody: `₹${txn.amount.toLocaleString()}`,
     });
-    sendBrowserNotification(
-      `${txn.type === 'credit' ? 'Credit' : 'Debit'}: ${txn.bank}`,
-      `₹${txn.amount.toLocaleString()}`
-    );
 
     toast.success(`Saved ${formatCurrency(txn.amount)} ${txn.type} transaction`);
   };

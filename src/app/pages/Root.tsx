@@ -51,11 +51,25 @@ export default function Root() {
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isTouchLayout, setIsTouchLayout] = useState(false);
   const [user, _setUser] = useState(auth.getCurrentUser());
 
   useEffect(() => {
     document.title = 'Serverless Expense Tracker - AI-Powered Financial Management';
     runNotificationEngine();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(pointer: coarse)');
+    const update = () => setIsTouchLayout(media.matches);
+    update();
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', update);
+      return () => media.removeEventListener('change', update);
+    }
+    media.addListener(update);
+    return () => media.removeListener(update);
   }, []);
 
   const handleLogout = async () => {
@@ -65,13 +79,14 @@ export default function Root() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[100svh] bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <Toaster position="top-center" expand={true} richColors />
       
       {/* Sidebar */}
       <aside className={cn(
         "hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:flex-col bg-card border-r border-border transition-all duration-300 z-30",
-        isSidebarOpen ? "lg:w-64" : "lg:w-20"
+        isSidebarOpen ? "lg:w-64" : "lg:w-20",
+        isTouchLayout && "lg:hidden"
       )}>
         <div className="flex flex-col h-full relative">
           {/* Logo */}
@@ -173,7 +188,7 @@ export default function Root() {
       </aside>
 
       {/* Mobile header */}
-      <header className="sticky top-0 z-40 border-b bg-card lg:hidden">
+      <header className={cn("sticky top-0 z-40 border-b bg-card", !isTouchLayout && "lg:hidden")}>
         <div className="flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-primary text-primary-foreground">
@@ -223,8 +238,8 @@ export default function Root() {
       </header>
 
       {/* Main content */}
-      <main className={cn("transition-all duration-300", isSidebarOpen ? "lg:pl-64" : "lg:pl-20")}>
-        <div className="container mx-auto p-6 lg:p-8">
+      <main className={cn("transition-all duration-300", !isTouchLayout && (isSidebarOpen ? "lg:pl-64" : "lg:pl-20"))}>
+        <div className="container mx-auto px-4 py-6 sm:px-6 lg:p-8">
           <Outlet />
         </div>
       </main>

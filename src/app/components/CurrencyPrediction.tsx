@@ -15,7 +15,9 @@ import {
   Area,
   AreaChart,
 } from 'recharts';
-import { TrendingUp, TrendingDown, Brain, RefreshCw, Clock } from 'lucide-react';
+import { Brain, RefreshCw, Clock } from 'lucide-react';
+import { fetchTimeSeries, getMarketStatus } from '../lib/marketData';
+import { buildForecast } from '../lib/forecast';
 
 interface CurrencyPredictionProps {
   pair: {
@@ -45,115 +47,79 @@ export function CurrencyPrediction({ pair }: CurrencyPredictionProps) {
     volatility: 'low' as 'low' | 'medium' | 'high',
   });
   const [loading, setLoading] = useState(false);
+  const marketStatus = getMarketStatus();
 
   useEffect(() => {
     generatePrediction();
   }, [pair]);
 
-  const generatePrediction = () => {
+  const generatePrediction = async () => {
     setLoading(true);
-    
-    const historicalPeriods = 48; // 48 hours of history
-    const futurePeriods = 24; // 24 hours ahead
-    const data: PredictionData[] = [];
-    
-    let currentRate = pair.rate;
-    const momentum = pair.changePercent / 100;
-    
-    // Generate historical data with realistic forex patterns
-    for (let i = -historicalPeriods; i < 0; i++) {
-      const volatility = 0.002; // Forex is less volatile than stocks
-      const noise = (Math.random() - 0.5) * volatility;
-      const trend = momentum * 0.05;
-      
-      currentRate = currentRate - (currentRate * trend) + (currentRate * noise);
-      
+    try {
+      const series = await fetchTimeSeries(pair.symbol, '1h', 120);
+      if (series.length < 12) throw new Error('Insufficient data');
+
+      const seriesPoints = series.map((p) => ({ time: p.time, value: p.close }));
+      const horizon = 24;
+      const { data, meta } = buildForecast(seriesPoints, horizon);
+
+      const formatted = data.map((point) => ({
+        ...point,
+        time: new Date(point.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        predicted: parseFloat(point.predicted.toFixed(4)),
+        upperBound: parseFloat(point.upperBound.toFixed(4)),
+        lowerBound: parseFloat(point.lowerBound.toFixed(4)),
+        actual: point.actual == null ? null : parseFloat(point.actual.toFixed(4)),
+      }));
+
+      setPredictionData(formatted);
+
+      const lastActual = seriesPoints[seriesPoints.length - 1]?.value ?? pair.rate;
+      const stepsFor1H = Math.max(1, Math.round((60 * 60 * 1000) / meta.intervalMs));
+      const stepsFor4H = Math.max(stepsFor1H, Math.round((4 * 60 * 60 * 1000) / meta.intervalMs));
+      const stepsFor24H = Math.max(stepsFor1H, Math.round((24 * 60 * 60 * 1000) / meta.intervalMs));
+
+      const p1 = data[seriesPoints.length + stepsFor1H - 1];
+      const p4 = data[seriesPoints.length + Math.min(stepsFor4H, horizon) - 1];
+      const p24 = data[seriesPoints.length + Math.min(stepsFor24H, horizon) - 1];
+
+      const next1Hour = p1 ? ((p1.predicted - lastActual) / lastActual) * 100 : 0;
+      const next4Hours = p4 ? ((p4.predicted - lastActual) / lastActual) * 100 : 0;
+      const next24Hours = p24 ? ((p24.predicted - lastActual) / lastActual) * 100 : 0;
+
+      const volatilityRatio = meta.stdev / lastActual;
+      let volatility: 'low' | 'medium' | 'high' = 'low';
+      if (volatilityRatio > 0.01) volatility = 'high';
+      else if (volatilityRatio > 0.005) volatility = 'medium';
+
+      const confidence = Math.max(65, Math.min(98, 92 - volatilityRatio * 800));
+
+      setPredictionSummary({
+        next1Hour,
+        next4Hours,
+        next24Hours,
+        confidence,
+        volatility,
+      });
+    } catch {
       const now = new Date();
-      now.setHours(now.getHours() + i);
-      
-      data.push({
+      setPredictionData([{
         time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        actual: parseFloat(currentRate.toFixed(4)),
-        predicted: 0,
-        upperBound: 0,
-        lowerBound: 0,
+        actual: pair.rate,
+        predicted: pair.rate,
+        upperBound: pair.rate,
+        lowerBound: pair.rate,
+      }]);
+      setPredictionSummary({
+        next1Hour: 0,
+        next4Hours: 0,
+        next24Hours: 0,
+        confidence: 50,
+        volatility: 'low',
       });
+    } finally {
+      setLoading(false);
     }
-    
-    // Current rate point
-    const now = new Date();
-    data.push({
-      time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      actual: pair.rate,
-      predicted: pair.rate,
-      upperBound: pair.rate,
-      lowerBound: pair.rate,
-    });
-    
-    // Generate future predictions using ARIMA-like model
-    let predictedRate = pair.rate;
-    const meanReversionSpeed = 0.4;
-    const baseVolatility = 0.001;
-    
-    for (let i = 1; i <= futurePeriods; i++) {
-      // Mean reversion with trend continuation
-      const reversionComponent = (predictedRate - pair.rate) * meanReversionSpeed;
-      const trendComponent = momentum * Math.exp(-i / 12); // Exponential decay
-      const randomComponent = (Math.random() - 0.5) * baseVolatility;
-      
-      predictedRate = predictedRate + 
-        (predictedRate * trendComponent) - 
-        reversionComponent + 
-        (predictedRate * randomComponent);
-      
-      const uncertainty = baseVolatility * Math.sqrt(i) * predictedRate;
-      
-      const futureTime = new Date();
-      futureTime.setHours(futureTime.getHours() + i);
-      
-      data.push({
-        time: futureTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        actual: null,
-        predicted: parseFloat(predictedRate.toFixed(4)),
-        upperBound: parseFloat((predictedRate + uncertainty * 2).toFixed(4)),
-        lowerBound: parseFloat((predictedRate - uncertainty * 2).toFixed(4)),
-      });
-    }
-    
-    setPredictionData(data);
-    
-    // Calculate prediction summary
-    const prediction1H = data[historicalPeriods + 1];
-    const prediction4H = data[historicalPeriods + 4];
-    const prediction24H = data[data.length - 1];
-    
-    const next1Hour = prediction1H 
-      ? ((prediction1H.predicted - pair.rate) / pair.rate) * 100 
-      : 0;
-    const next4Hours = prediction4H 
-      ? ((prediction4H.predicted - pair.rate) / pair.rate) * 100 
-      : 0;
-    const next24Hours = prediction24H 
-      ? ((prediction24H.predicted - pair.rate) / pair.rate) * 100 
-      : 0;
-    
-    const confidence = Math.max(70, Math.min(98, 92 - Math.abs(next24Hours) * 10));
-    
-    // Determine volatility
-    const priceRange = Math.abs(next24Hours);
-    let volatility: 'low' | 'medium' | 'high' = 'low';
-    if (priceRange > 0.5) volatility = 'high';
-    else if (priceRange > 0.2) volatility = 'medium';
-    
-    setPredictionSummary({
-      next1Hour,
-      next4Hours,
-      next24Hours,
-      confidence,
-      volatility,
-    });
-    
-    setLoading(false);
   };
 
   const currentTime = new Date().toLocaleTimeString('en-US', { 
@@ -169,6 +135,7 @@ export function CurrencyPrediction({ pair }: CurrencyPredictionProps) {
     year: 'numeric',
     weekday: 'long'
   });
+  const nowMarker = predictionData.filter(d => d.actual !== null).slice(-1)[0]?.time;
 
   return (
     <Card>
@@ -178,6 +145,9 @@ export function CurrencyPrediction({ pair }: CurrencyPredictionProps) {
             <CardTitle className="flex items-center gap-2">
               <Brain className="size-5 text-blue-500" />
               Forex Rate Prediction
+              <Badge variant={marketStatus.configured ? 'default' : 'secondary'} className="text-[10px]">
+                {marketStatus.configured ? 'LIVE' : 'DEMO'}
+              </Badge>
             </CardTitle>
             <CardDescription>
               Real-time ML-powered exchange rate forecast for {pair.symbol}
@@ -332,7 +302,7 @@ export function CurrencyPrediction({ pair }: CurrencyPredictionProps) {
               
               {/* Reference line at current time */}
               <ReferenceLine 
-                x={predictionData.find(d => d.actual === pair.rate)?.time} 
+                x={nowMarker} 
                 stroke="#666" 
                 strokeDasharray="3 3" 
                 label="Now"
@@ -406,6 +376,7 @@ export function CurrencyPrediction({ pair }: CurrencyPredictionProps) {
             with {predictionSummary.confidence.toFixed(1)}% model confidence.
             {predictionSummary.volatility === 'high' && ' Exercise caution with position sizing.'}
             {predictionSummary.volatility === 'low' && ' Stable conditions favor longer-term positions.'}
+            {' '}This is an experimental forecast, not financial advice.
           </p>
         </div>
       </CardContent>

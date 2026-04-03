@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Download, Database, Shield, Bell } from 'lucide-react';
@@ -7,9 +8,43 @@ import { Switch } from '../components/ui/switch';
 import { Label } from '../components/ui/label';
 import { useCurrency } from '../lib/currency';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Input } from '../components/ui/input';
+import { getPreferences, savePreferences, requestNotificationPermission, NotificationType } from '../lib/notifications';
 
 export default function Settings() {
   const { currency, CURRENCIES, changeCurrency } = useCurrency();
+  const [prefs, setPrefs] = useState(getPreferences());
+
+  useEffect(() => {
+    const reload = () => setPrefs(getPreferences());
+    window.addEventListener('notifications-changed', reload);
+    return () => window.removeEventListener('notifications-changed', reload);
+  }, []);
+
+  const updatePrefs = (next: Partial<typeof prefs>) => {
+    savePreferences(next);
+    setPrefs({ ...prefs, ...next });
+  };
+
+  const toggleType = (type: NotificationType) => {
+    const current = prefs.enabledTypes;
+    const next = current.includes(type)
+      ? current.filter(t => t !== type)
+      : [...current, type];
+    updatePrefs({ enabledTypes: next });
+  };
+
+  const notifTypeRows: { type: NotificationType; label: string; desc: string }[] = [
+    { type: 'budget_alert', label: 'Budget Alerts', desc: 'Notify when budgets approach or exceed limits' },
+    { type: 'large_transaction', label: 'Large Transactions', desc: 'Get alerts for unusually large spends' },
+    { type: 'bill_reminder', label: 'Bill Reminders', desc: 'Upcoming bill and due-date reminders' },
+    { type: 'recurring_due', label: 'Recurring Bills', desc: 'Alerts for recurring expenses due soon' },
+    { type: 'sms_transaction', label: 'SMS Transactions', desc: 'Bank SMS transaction alerts' },
+    { type: 'trade_executed', label: 'Trades', desc: 'Forex/stock/crypto trade confirmations' },
+    { type: 'scan_complete', label: 'Receipt Scans', desc: 'Receipt and QR/Barcode scan results' },
+    { type: 'wallet_update', label: 'Wallet Updates', desc: 'UPI wallet balance changes' },
+    { type: 'info', label: 'General Info', desc: 'Informational updates and insights' },
+  ];
 
   const handleExport = async () => {
     try {
@@ -118,34 +153,96 @@ export default function Settings() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="budget-alerts">Budget Alerts</Label>
-                <p className="text-sm text-muted-foreground">
-                  Get notified when approaching budget limits
-                </p>
-              </div>
-              <Switch id="budget-alerts" defaultChecked />
+            <div className="grid gap-3">
+              {notifTypeRows.map(row => (
+                <div key={row.type} className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor={`notif-${row.type}`}>{row.label}</Label>
+                    <p className="text-sm text-muted-foreground">{row.desc}</p>
+                  </div>
+                  <Switch
+                    id={`notif-${row.type}`}
+                    checked={prefs.enabledTypes.includes(row.type)}
+                    onCheckedChange={() => toggleType(row.type)}
+                  />
+                </div>
+              ))}
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="insights">AI Insights</Label>
-                <p className="text-sm text-muted-foreground">
-                  Receive weekly spending insights
-                </p>
+            <div className="border-t pt-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="desktop-notifs">Desktop Notifications</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Show browser notifications when allowed
+                  </p>
+                </div>
+                <Switch
+                  id="desktop-notifs"
+                  checked={prefs.desktopEnabled}
+                  onCheckedChange={() => updatePrefs({ desktopEnabled: !prefs.desktopEnabled })}
+                />
               </div>
-              <Switch id="insights" defaultChecked />
-            </div>
 
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="unusual">Unusual Activity</Label>
-                <p className="text-sm text-muted-foreground">
-                  Alert for unusual spending patterns
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="sound-notifs">Notification Sound</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Play a short sound with new alerts
+                  </p>
+                </div>
+                <Switch
+                  id="sound-notifs"
+                  checked={prefs.soundEnabled}
+                  onCheckedChange={() => updatePrefs({ soundEnabled: !prefs.soundEnabled })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="dnd">Do Not Disturb</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Silence desktop alerts during quiet hours
+                  </p>
+                </div>
+                <Switch
+                  id="dnd"
+                  checked={prefs.dndEnabled}
+                  onCheckedChange={() => updatePrefs({ dndEnabled: !prefs.dndEnabled })}
+                />
+              </div>
+
+              {prefs.dndEnabled && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="dnd-start">Quiet Hours Start</Label>
+                    <Input
+                      id="dnd-start"
+                      type="time"
+                      value={prefs.dndStart}
+                      onChange={(e) => updatePrefs({ dndStart: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="dnd-end">Quiet Hours End</Label>
+                    <Input
+                      id="dnd-end"
+                      type="time"
+                      value={prefs.dndEnd}
+                      onChange={(e) => updatePrefs({ dndEnd: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => requestNotificationPermission()}>
+                  Request Browser Permission
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Permission status: {typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'}
                 </p>
               </div>
-              <Switch id="unusual" defaultChecked />
             </div>
           </CardContent>
         </Card>

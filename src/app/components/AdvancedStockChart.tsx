@@ -23,6 +23,7 @@ import {
   BarChart2
 } from 'lucide-react';
 import { useCurrency } from '../lib/currency';
+import { fetchTimeSeries } from '../lib/marketData';
 
 interface AdvancedStockChartProps {
   stock: {
@@ -31,6 +32,11 @@ interface AdvancedStockChartProps {
     price: number;
     change: number;
     changePercent: number;
+    apiSymbol?: string;
+    high?: number;
+    low?: number;
+    open?: number;
+    volume?: number;
   };
 }
 
@@ -98,10 +104,66 @@ export function AdvancedStockChart({ stock }: AdvancedStockChartProps) {
   const [chartData, setChartData] = useState<CandleData[]>([]);
 
   useEffect(() => {
-    generateChartData();
+    void generateChartData();
   }, [stock, timeframe]);
 
-  const generateChartData = () => {
+  const generateChartData = async () => {
+    const intervalMap: Record<typeof timeframe, string> = {
+      '1min': '1min',
+      '5min': '5min',
+      '1hour': '1h',
+      '1day': '1day',
+      '1week': '1week',
+    };
+    const outputMap: Record<typeof timeframe, number> = {
+      '1min': 60,
+      '5min': 78,
+      '1hour': 48,
+      '1day': 60,
+      '1week': 52,
+    };
+
+    try {
+      const symbol = stock.apiSymbol || stock.symbol;
+      const series = await fetchTimeSeries(symbol, intervalMap[timeframe], outputMap[timeframe]);
+      if (series.length > 0) {
+        const closePrices: number[] = [];
+        const data: CandleData[] = series.map((point) => {
+          closePrices.push(point.close);
+          const sma20 = calculateSMA(closePrices, 20);
+          const sma50 = calculateSMA(closePrices, 50);
+          const ema12 = calculateEMA(closePrices, 12);
+          const ema26 = calculateEMA(closePrices, 26);
+          const bollinger = calculateBollingerBands(closePrices, 20);
+
+          const date = new Date(point.time);
+          const timeLabel = timeframe === '1day' || timeframe === '1week'
+            ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            : date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+          return {
+            time: timeLabel,
+            open: parseFloat(point.open.toFixed(2)),
+            high: parseFloat(point.high.toFixed(2)),
+            low: parseFloat(point.low.toFixed(2)),
+            close: parseFloat(point.close.toFixed(2)),
+            volume: Math.max(0, Math.floor(point.volume || 0)),
+            sma20: parseFloat(sma20.toFixed(2)),
+            sma50: parseFloat(sma50.toFixed(2)),
+            ema12: parseFloat(ema12.toFixed(2)),
+            ema26: parseFloat(ema26.toFixed(2)),
+            upperBand: parseFloat(bollinger.upper.toFixed(2)),
+            middleBand: parseFloat(bollinger.middle.toFixed(2)),
+            lowerBand: parseFloat(bollinger.lower.toFixed(2)),
+          };
+        });
+        setChartData(data);
+        return;
+      }
+    } catch {
+      // fallback to synthetic data
+    }
+
     const dataPoints = timeframe === '1min' ? 60 : timeframe === '5min' ? 78 : timeframe === '1hour' ? 24 : timeframe === '1day' ? 30 : 52;
     const data: CandleData[] = [];
     let basePrice = stock.price;
@@ -117,7 +179,6 @@ export function AdvancedStockChart({ stock }: AdvancedStockChartProps) {
 
       closePrices.push(close);
 
-      // Calculate indicators
       const sma20 = calculateSMA(closePrices, 20);
       const sma50 = calculateSMA(closePrices, 50);
       const ema12 = calculateEMA(closePrices, 12);
@@ -489,23 +550,23 @@ export function AdvancedStockChart({ stock }: AdvancedStockChartProps) {
             </div>
           )}
 
-          {/* Technical Analysis Summary */}
+          {/* Technical Summary */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted rounded-lg">
             <div>
-              <p className="text-sm text-muted-foreground">52 Week High</p>
-              <p className="text-lg font-bold">{formatCurrency(stock.price * 1.25)}</p>
+              <p className="text-sm text-muted-foreground">Day High</p>
+              <p className="text-lg font-bold">{formatCurrency(stock.high ?? stock.price)}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">52 Week Low</p>
-              <p className="text-lg font-bold">{formatCurrency(stock.price * 0.75)}</p>
+              <p className="text-sm text-muted-foreground">Day Low</p>
+              <p className="text-lg font-bold">{formatCurrency(stock.low ?? stock.price)}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Avg Volume</p>
-              <p className="text-lg font-bold">{(Math.random() * 5000000).toFixed(0)}</p>
+              <p className="text-sm text-muted-foreground">Volume</p>
+              <p className="text-lg font-bold">{stock.volume ? stock.volume.toLocaleString() : '—'}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">P/E Ratio</p>
-              <p className="text-lg font-bold">{(Math.random() * 40 + 10).toFixed(2)}</p>
+              <p className="text-sm text-muted-foreground">Open</p>
+              <p className="text-lg font-bold">{formatCurrency(stock.open ?? stock.price)}</p>
             </div>
           </div>
         </div>

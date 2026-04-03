@@ -2,9 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { Mic, StopCircle } from 'lucide-react';
 import { Button } from './ui/button';
 import { toast } from 'sonner';
+import { parseVoiceExpense, VoiceExpenseResult } from '../lib/voiceCommands';
 
 interface VoiceExpenseInputProps {
-  onTranscribed: (text: string, data: { amount?: string; category?: string; description?: string }) => void;
+  onTranscribed: (text: string, data: VoiceExpenseResult) => void;
 }
 
 export function VoiceExpenseInput({ onTranscribed }: VoiceExpenseInputProps) {
@@ -28,7 +29,7 @@ export function VoiceExpenseInput({ onTranscribed }: VoiceExpenseInputProps) {
 
     recognition.onstart = () => {
       setIsRecording(true);
-      toast.info('Listening... Speak your expense now.', { duration: 3000 });
+      toast.info('Listening... Try: "Spent 450 on groceries via UPI yesterday".', { duration: 4000 });
     };
 
     recognition.onresult = (event: any) => {
@@ -52,23 +53,24 @@ export function VoiceExpenseInput({ onTranscribed }: VoiceExpenseInputProps) {
   }, []);
 
   const processVoiceInput = (text: string) => {
-    // Basic AI data extraction logic
-    const lowerText = text.toLowerCase();
-    
-    // Extract Number
-    const matchAmount = lowerText.match(/\b\d+(\.\d{1,2})?\b/);
-    const amount = matchAmount ? matchAmount[0] : '';
+    const parsed = parseVoiceExpense(text);
+    const payload: VoiceExpenseResult = {
+      description: parsed.description,
+      ...(parsed.amount ? { amount: parsed.amount } : {}),
+      ...(parsed.category ? { category: parsed.category } : {}),
+      ...(parsed.paymentMethod ? { paymentMethod: parsed.paymentMethod } : {}),
+      ...(parsed.date ? { date: parsed.date } : {}),
+    };
+    onTranscribed(text, payload);
 
-    // Extract Context
-    let category = 'Others';
-    if (lowerText.includes('food') || lowerText.includes('restaurant') || lowerText.includes('coffee') || lowerText.includes('burger')) category = 'Food & Dining';
-    else if (lowerText.includes('uber') || lowerText.includes('taxi') || lowerText.includes('gas') || lowerText.includes('ride')) category = 'Transportation';
-    else if (lowerText.includes('shop') || lowerText.includes('grocery') || lowerText.includes('clothes')) category = 'Shopping';
+    const summaryParts = [
+      parsed.amount ? `₹${parsed.amount}` : null,
+      parsed.category,
+      parsed.paymentMethod,
+      parsed.date,
+    ].filter(Boolean);
 
-    const description = text.trim();
-
-    onTranscribed(description, { amount, category, description });
-    toast.success(`Heard: "${text}"`, { duration: 4000 });
+    toast.success(`Heard: "${text}"${summaryParts.length ? ` • Parsed: ${summaryParts.join(' · ')}` : ''}`, { duration: 5000 });
   };
 
   const toggleRecording = () => {

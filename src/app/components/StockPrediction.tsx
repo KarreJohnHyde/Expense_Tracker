@@ -15,6 +15,8 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, Brain, RefreshCw } from 'lucide-react';
 import { useCurrency } from '../lib/currency';
+import { fetchTimeSeries, getMarketStatus } from '../lib/marketData';
+import { buildForecast } from '../lib/forecast';
 
 interface StockPredictionProps {
   stock: {
@@ -23,6 +25,7 @@ interface StockPredictionProps {
     price: number;
     change: number;
     changePercent: number;
+    apiSymbol?: string;
   };
 }
 
@@ -44,107 +47,75 @@ export function StockPrediction({ stock }: StockPredictionProps) {
     trend: 'neutral' as 'bullish' | 'bearish' | 'neutral',
   });
   const [loading, setLoading] = useState(false);
+  const marketStatus = getMarketStatus();
 
   useEffect(() => {
     generatePrediction();
   }, [stock]);
 
-  const generatePrediction = () => {
+  const generatePrediction = async () => {
     setLoading(true);
-    
-    // Simulate ML/AI prediction using technical analysis patterns
-    const historicalPeriods = 30;
-    const futurePeriods = 24; // 24 hours ahead
-    const data: PredictionData[] = [];
-    
-    let currentPrice = stock.price;
-    let momentum = stock.changePercent / 100;
-    
-    // Generate historical data
-    for (let i = -historicalPeriods; i < 0; i++) {
-      const volatility = 0.02;
-      const noise = (Math.random() - 0.5) * volatility;
-      currentPrice = currentPrice - (currentPrice * momentum * 0.1) + (currentPrice * noise);
-      
+    try {
+      const series = await fetchTimeSeries(stock.apiSymbol || stock.symbol, '1h', 120);
+      if (series.length < 12) throw new Error('Insufficient data');
+
+      const seriesPoints = series.map((p) => ({ time: p.time, value: p.close }));
+      const horizon = 24;
+      const { data, meta } = buildForecast(seriesPoints, horizon);
+
+      const formatted = data.map((point) => ({
+        ...point,
+        time: new Date(point.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        predicted: parseFloat(point.predicted.toFixed(2)),
+        upperBound: parseFloat(point.upperBound.toFixed(2)),
+        lowerBound: parseFloat(point.lowerBound.toFixed(2)),
+        actual: point.actual == null ? null : parseFloat(point.actual.toFixed(2)),
+      }));
+
+      setPredictionData(formatted);
+
+      const lastActual = seriesPoints[seriesPoints.length - 1]?.value ?? stock.price;
+      const stepsForHour = Math.max(1, Math.round((60 * 60 * 1000) / meta.intervalMs));
+      const stepsForDay = Math.max(stepsForHour, Math.round((24 * 60 * 60 * 1000) / meta.intervalMs));
+
+      const nextHourPoint = data[seriesPoints.length + stepsForHour - 1];
+      const nextDayPoint = data[seriesPoints.length + Math.min(stepsForDay, horizon) - 1];
+
+      const nextHourChange = nextHourPoint ? ((nextHourPoint.predicted - lastActual) / lastActual) * 100 : 0;
+      const nextDayChange = nextDayPoint ? ((nextDayPoint.predicted - lastActual) / lastActual) * 100 : 0;
+
+      const volatility = meta.stdev / lastActual;
+      const confidence = Math.max(55, Math.min(95, 90 - volatility * 200));
+
+      let trend: 'bullish' | 'bearish' | 'neutral' = 'neutral';
+      if (nextDayChange > 0.5) trend = 'bullish';
+      else if (nextDayChange < -0.5) trend = 'bearish';
+
+      setPredictionSummary({
+        nextHourChange,
+        nextDayChange,
+        confidence,
+        trend,
+      });
+    } catch {
+      // fallback to current price when live data is unavailable
       const now = new Date();
-      now.setHours(now.getHours() + i);
-      
-      data.push({
+      setPredictionData([{
         time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        actual: parseFloat(currentPrice.toFixed(2)),
-        predicted: 0,
-        upperBound: 0,
-        lowerBound: 0,
+        actual: stock.price,
+        predicted: stock.price,
+        upperBound: stock.price,
+        lowerBound: stock.price,
+      }]);
+      setPredictionSummary({
+        nextHourChange: 0,
+        nextDayChange: 0,
+        confidence: 50,
+        trend: 'neutral',
       });
+    } finally {
+      setLoading(false);
     }
-    
-    // Current price point
-    const now = new Date();
-    data.push({
-      time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      actual: stock.price,
-      predicted: stock.price,
-      upperBound: stock.price,
-      lowerBound: stock.price,
-    });
-    
-    // Generate future predictions using momentum + mean reversion
-    let predictedPrice = stock.price;
-    const meanReversionStrength = 0.3;
-    const baseVolatility = 0.015;
-    
-    for (let i = 1; i <= futurePeriods; i++) {
-      // Apply momentum with gradual mean reversion
-      const reversionFactor = (predictedPrice - stock.price) * meanReversionStrength;
-      const trendComponent = momentum * (1 - i / futurePeriods);
-      const randomWalk = (Math.random() - 0.5) * baseVolatility;
-      
-      predictedPrice = predictedPrice + 
-        (predictedPrice * trendComponent) - 
-        reversionFactor + 
-        (predictedPrice * randomWalk);
-      
-      const uncertainty = baseVolatility * Math.sqrt(i) * predictedPrice;
-      
-      const futureTime = new Date();
-      futureTime.setHours(futureTime.getHours() + i);
-      
-      data.push({
-        time: futureTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        actual: null,
-        predicted: parseFloat(predictedPrice.toFixed(2)),
-        upperBound: parseFloat((predictedPrice + uncertainty).toFixed(2)),
-        lowerBound: parseFloat((predictedPrice - uncertainty).toFixed(2)),
-      });
-    }
-    
-    setPredictionData(data);
-    
-    // Calculate prediction summary
-    const oneHourPrediction = data[historicalPeriods + 1];
-    const endPrediction = data[data.length - 1];
-    
-    const nextHourChange = oneHourPrediction 
-      ? ((oneHourPrediction.predicted - stock.price) / stock.price) * 100 
-      : 0;
-    const nextDayChange = endPrediction 
-      ? ((endPrediction.predicted - stock.price) / stock.price) * 100 
-      : 0;
-    
-    const confidence = Math.max(60, Math.min(95, 85 - Math.abs(nextDayChange) * 5));
-    
-    let trend: 'bullish' | 'bearish' | 'neutral' = 'neutral';
-    if (nextDayChange > 0.5) trend = 'bullish';
-    else if (nextDayChange < -0.5) trend = 'bearish';
-    
-    setPredictionSummary({
-      nextHourChange,
-      nextDayChange,
-      confidence,
-      trend,
-    });
-    
-    setLoading(false);
   };
 
   const currentTime = new Date().toLocaleTimeString('en-US', { 
@@ -152,6 +123,7 @@ export function StockPrediction({ stock }: StockPredictionProps) {
     minute: '2-digit',
     hour12: true 
   });
+  const nowMarker = predictionData.filter(d => d.actual !== null).slice(-1)[0]?.time;
 
   return (
     <Card>
@@ -161,6 +133,9 @@ export function StockPrediction({ stock }: StockPredictionProps) {
             <CardTitle className="flex items-center gap-2">
               <Brain className="size-5 text-purple-500" />
               AI Price Prediction
+              <Badge variant={marketStatus.configured ? 'default' : 'secondary'} className="text-[10px]">
+                {marketStatus.configured ? 'LIVE' : 'DEMO'}
+              </Badge>
             </CardTitle>
             <CardDescription>
               Real-time ML-powered price forecast for {stock.symbol}
@@ -287,7 +262,7 @@ export function StockPrediction({ stock }: StockPredictionProps) {
               
               {/* Reference line at current time */}
               <ReferenceLine 
-                x={predictionData.find((d: PredictionData) => d.actual === stock.price)?.time} 
+                x={nowMarker} 
                 stroke="#666" 
                 strokeDasharray="3 3" 
                 label="Now"
@@ -361,6 +336,7 @@ export function StockPrediction({ stock }: StockPredictionProps) {
             {predictionSummary.nextDayChange > 2 && ' Strong upward momentum detected.'}
             {predictionSummary.nextDayChange < -2 && ' Significant downward pressure identified.'}
             {Math.abs(predictionSummary.nextDayChange) < 1 && ' Expect consolidation and range-bound movement.'}
+            {' '}This is an experimental forecast, not financial advice.
           </p>
         </div>
       </CardContent>

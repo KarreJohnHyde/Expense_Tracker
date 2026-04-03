@@ -1,4 +1,5 @@
 import { Hono } from "npm:hono";
+import type { Context } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import * as kv from "./kv_store.tsx";
@@ -28,14 +29,14 @@ app.use(
 );
 
 // Health check endpoint
-app.get("/make-server-8d54d463/health", (c) => {
+app.get("/make-server-8d54d463/health", (c: Context) => {
   return c.json({ status: "ok" });
 });
 
 // ==================== EXPENSE ROUTES ====================
 
 // Get all expenses for a user
-app.get("/make-server-8d54d463/expenses", async (c) => {
+app.get("/make-server-8d54d463/expenses", async (c: Context) => {
   try {
     const expenses = await kv.getByPrefix("expense:");
     return c.json({ expenses: expenses || [] });
@@ -46,7 +47,7 @@ app.get("/make-server-8d54d463/expenses", async (c) => {
 });
 
 // Add new expense
-app.post("/make-server-8d54d463/expenses", async (c) => {
+app.post("/make-server-8d54d463/expenses", async (c: Context) => {
   try {
     const body = await c.req.json();
     const { amount, category, description, date, paymentMethod, tags, location, receipt } = body;
@@ -78,7 +79,7 @@ app.post("/make-server-8d54d463/expenses", async (c) => {
 });
 
 // Update expense
-app.put("/make-server-8d54d463/expenses/:id", async (c) => {
+app.put("/make-server-8d54d463/expenses/:id", async (c: Context) => {
   try {
     const id = c.req.param('id');
     const body = await c.req.json();
@@ -103,7 +104,7 @@ app.put("/make-server-8d54d463/expenses/:id", async (c) => {
 });
 
 // Delete expense
-app.delete("/make-server-8d54d463/expenses/:id", async (c) => {
+app.delete("/make-server-8d54d463/expenses/:id", async (c: Context) => {
   try {
     const id = c.req.param('id');
     await kv.del(id);
@@ -117,7 +118,7 @@ app.delete("/make-server-8d54d463/expenses/:id", async (c) => {
 // ==================== BUDGET ROUTES ====================
 
 // Get budgets
-app.get("/make-server-8d54d463/budgets", async (c) => {
+app.get("/make-server-8d54d463/budgets", async (c: Context) => {
   try {
     const budgets = await kv.getByPrefix("budget:");
     return c.json({ budgets: budgets || [] });
@@ -128,7 +129,7 @@ app.get("/make-server-8d54d463/budgets", async (c) => {
 });
 
 // Set budget
-app.post("/make-server-8d54d463/budgets", async (c) => {
+app.post("/make-server-8d54d463/budgets", async (c: Context) => {
   try {
     const body = await c.req.json();
     const { category, amount, period } = body;
@@ -153,7 +154,7 @@ app.post("/make-server-8d54d463/budgets", async (c) => {
 // ==================== AI/ML ROUTES ====================
 
 // AI Expense Categorization
-app.post("/make-server-8d54d463/ai/categorize", async (c) => {
+app.post("/make-server-8d54d463/ai/categorize", async (c: Context) => {
   try {
     const body = await c.req.json();
     const { description, amount } = body;
@@ -174,7 +175,7 @@ app.post("/make-server-8d54d463/ai/categorize", async (c) => {
 });
 
 // AI Budget Predictions
-app.get("/make-server-8d54d463/ai/predictions", async (c) => {
+app.get("/make-server-8d54d463/ai/predictions", async (c: Context) => {
   try {
     const expenses = await kv.getByPrefix("expense:");
     const predictions = generatePredictions(expenses || []);
@@ -187,7 +188,7 @@ app.get("/make-server-8d54d463/ai/predictions", async (c) => {
 });
 
 // AI Spending Insights
-app.get("/make-server-8d54d463/ai/insights", async (c) => {
+app.get("/make-server-8d54d463/ai/insights", async (c: Context) => {
   try {
     const expenses = await kv.getByPrefix("expense:");
     const insights = generateInsights(expenses || []);
@@ -200,7 +201,7 @@ app.get("/make-server-8d54d463/ai/insights", async (c) => {
 });
 
 // Receipt OCR Processing
-app.post("/make-server-8d54d463/ai/ocr", async (c) => {
+app.post("/make-server-8d54d463/ai/ocr", async (c: Context) => {
   try {
     const body = await c.req.json();
     const { imageData } = body;
@@ -223,7 +224,7 @@ app.post("/make-server-8d54d463/ai/ocr", async (c) => {
 // ==================== ANALYTICS ROUTES ====================
 
 // Get spending analytics
-app.get("/make-server-8d54d463/analytics", async (c) => {
+app.get("/make-server-8d54d463/analytics", async (c: Context) => {
   try {
     const expenses = await kv.getByPrefix("expense:");
     const analytics = calculateAnalytics(expenses || []);
@@ -236,7 +237,7 @@ app.get("/make-server-8d54d463/analytics", async (c) => {
 });
 
 // Export data
-app.get("/make-server-8d54d463/export", async (c) => {
+app.get("/make-server-8d54d463/export", async (c: Context) => {
   try {
     const expenses = await kv.getByPrefix("expense:");
     const budgets = await kv.getByPrefix("budget:");

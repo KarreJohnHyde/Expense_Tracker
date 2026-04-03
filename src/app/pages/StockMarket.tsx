@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -23,12 +23,14 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { AdvancedStockChart } from '../components/AdvancedStockChart';
 import { StockPrediction } from '../components/StockPrediction';
 import { useCurrency } from '../lib/currency';
+import { fetchQuotes, fetchTimeSeries, getMarketStatus } from '../lib/marketData';
 
 interface Stock {
   id: string;
   symbol: string;
   name: string;
   sector: string;
+  apiSymbol?: string;
   price: number;
   change: number;
   changePercent: number;
@@ -104,10 +106,15 @@ const MOCK_STOCKS: Stock[] = [
   { id: '32', symbol: 'INDUSINDBK', name: 'IndusInd Bank', sector: 'Finance', price: 1420.75, change: 32.50, changePercent: 2.34, volume: 2100000, marketCap: 110000000000, high: 1430, low: 1398, open: 1400 },
 ];
 
+const STOCK_SEED: Stock[] = MOCK_STOCKS.map((s) => ({
+  ...s,
+  apiSymbol: `${s.symbol}:NSE`,
+}));
+
 export default function StockMarket() {
   const { formatCurrency } = useCurrency();
-  const [stocks, setStocks] = useState<Stock[]>(MOCK_STOCKS);
-  const [filteredStocks, setFilteredStocks] = useState<Stock[]>(MOCK_STOCKS);
+  const [stocks, setStocks] = useState<Stock[]>(STOCK_SEED);
+  const [filteredStocks, setFilteredStocks] = useState<Stock[]>(STOCK_SEED);
   const [portfolio, setPortfolio] = useState<Portfolio[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState('All');
@@ -117,6 +124,9 @@ export default function StockMarket() {
   const [tradeQuantity, setTradeQuantity] = useState(1);
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState('');
+  const marketStatus = getMarketStatus();
 
   // Update current time every second
   useEffect(() => {
@@ -126,28 +136,52 @@ export default function StockMarket() {
     return () => clearInterval(timer);
   }, []);
 
-  // Simulate real-time price updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setStocks((prevStocks: Stock[]) =>
-        prevStocks.map((stock: Stock) => {
-          const priceChange = (Math.random() - 0.5) * 10;
-          const newPrice = Math.max(stock.price + priceChange, 1);
-          const change = newPrice - stock.open;
-          const changePercent = (change / stock.open) * 100;
-
-          return {
-            ...stock,
-            price: parseFloat(newPrice.toFixed(2)),
-            change: parseFloat(change.toFixed(2)),
-            changePercent: parseFloat(changePercent.toFixed(2)),
-          };
-        })
-      );
-    }, 3000); // Update every 3 seconds
-
-    return () => clearInterval(interval);
+  const loadQuotes = useCallback(async () => {
+    try {
+      const symbols = STOCK_SEED.map((s) => s.apiSymbol || s.symbol);
+      const quotes = await fetchQuotes(symbols);
+      const updated = STOCK_SEED.map((seed) => {
+        const quote = quotes[seed.apiSymbol || ''] || quotes[seed.symbol];
+        if (!quote) return seed;
+        const price = quote.price || seed.price;
+        const open = quote.open ?? seed.open;
+        const previousClose = quote.previousClose ?? open;
+        const change = quote.change ?? (price - previousClose);
+        const changePercent = quote.changePercent ?? (previousClose ? (change / previousClose) * 100 : 0);
+        return {
+          ...seed,
+          price: parseFloat(price.toFixed(2)),
+          open,
+          high: quote.high ?? seed.high,
+          low: quote.low ?? seed.low,
+          volume: quote.volume ?? seed.volume,
+          change: parseFloat(change.toFixed(2)),
+          changePercent: parseFloat(changePercent.toFixed(2)),
+        };
+      });
+      setStocks(updated);
+      setLastUpdated(new Date().toLocaleTimeString('en-IN'));
+    } catch {
+      // Keep seed data if live fetch fails
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadQuotes();
+    const interval = setInterval(loadQuotes, 15000);
+    return () => clearInterval(interval);
+  }, [loadQuotes]);
+
+  useEffect(() => {
+    if (selectedStock) {
+      const updated = stocks.find((s) => s.id === selectedStock.id);
+      if (updated && updated !== selectedStock) {
+        setSelectedStock(updated);
+      }
+    }
+  }, [stocks, selectedStock]);
 
   // Filter stocks
   useEffect(() => {
@@ -172,7 +206,24 @@ export default function StockMarket() {
   }, [stocks, selectedSector, searchQuery]);
 
   useEffect(() => {
-    if (selectedStock) {
+    let cancelled = false;
+    const loadSeries = async () => {
+      if (!selectedStock) return;
+      try {
+        const symbol = selectedStock.apiSymbol || selectedStock.symbol;
+        const series = await fetchTimeSeries(symbol, '5min', 60);
+        if (cancelled) return;
+        if (series.length > 0) {
+          setChartData(series.map((p) => ({
+            time: new Date(p.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+            price: parseFloat(p.close.toFixed(2)),
+          })));
+          return;
+        }
+      } catch {
+        // fall back
+      }
+
       const data: ChartPoint[] = [];
       let price = selectedStock.open;
       for (let i = 0; i < 20; i++) {
@@ -182,8 +233,10 @@ export default function StockMarket() {
           price: parseFloat(price.toFixed(2)),
         });
       }
-      setChartData(data);
-    }
+      if (!cancelled) setChartData(data);
+    };
+    loadSeries();
+    return () => { cancelled = true; };
   }, [selectedStock]);
 
   const handleBuy = () => {
@@ -274,14 +327,26 @@ export default function StockMarket() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Stock Market</h1>
         <p className="text-muted-foreground">
-          Real-time stock trading and portfolio management
+          {marketStatus.configured ? 'Live stock prices via Twelve Data' : 'Demo stock prices (configure live data)'}
         </p>
         <div className="flex items-center gap-2 mt-2">
-          <Badge variant="default" className="animate-pulse">LIVE</Badge>
+          <Badge variant={marketStatus.configured ? 'default' : 'secondary'} className={marketStatus.configured ? 'animate-pulse' : ''}>
+            {marketStatus.configured ? 'LIVE' : 'DEMO'}
+          </Badge>
           <span className="text-sm text-muted-foreground">
             {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })} | 
             {currentTime.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' })}
           </span>
+          {lastUpdated && (
+            <Badge variant="outline" className="text-xs">
+              Updated: {lastUpdated}
+            </Badge>
+          )}
+          {loading && (
+            <Badge variant="outline" className="text-xs">
+              Updating…
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -375,7 +440,7 @@ export default function StockMarket() {
       <Card>
         <CardHeader>
           <CardTitle>Live Market</CardTitle>
-          <CardDescription>Real-time stock prices (updates every 3 seconds)</CardDescription>
+          <CardDescription>Live stock prices (auto-refreshes every 15 seconds)</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">

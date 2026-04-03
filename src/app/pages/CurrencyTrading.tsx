@@ -35,7 +35,8 @@ import {
   autoRecordTrade,
   getTradeHistory,
 } from '../lib/forexRates';
-import { saveNotification, sendBrowserNotification } from '../lib/notifications';
+import { fetchTimeSeries, getMarketStatus } from '../lib/marketData';
+import { notifyUser } from '../lib/notifications';
 
 interface ForexPosition {
   id: string;
@@ -78,6 +79,7 @@ export default function CurrencyTrading() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string>('');
+  const marketStatus = getMarketStatus();
 
   // Currency Converter
   const [fromCurrency, setFromCurrency] = useState('USD');
@@ -94,7 +96,8 @@ export default function CurrencyTrading() {
       const livePairs = await fetchForexPairs();
       if (livePairs.length > 0) {
         setPairs(livePairs);
-        setLastUpdated(new Date().toLocaleTimeString('en-IN'));
+        const updatedAt = livePairs[0]?.lastUpdated ? new Date(livePairs[0].lastUpdated) : new Date();
+        setLastUpdated(updatedAt.toLocaleTimeString('en-IN'));
         // Update positions' current rates
         setPositions((prev: ForexPosition[]) => {
           const updated = prev.map((pos: ForexPosition) => {
@@ -119,15 +122,40 @@ export default function CurrencyTrading() {
     return () => clearInterval(interval);
   }, [loadRates]);
 
+  useEffect(() => {
+    if (selectedPair) {
+      const updated = pairs.find((p: ForexPair) => p.symbol === selectedPair.symbol);
+      if (updated && updated !== selectedPair) {
+        setSelectedPair(updated);
+      }
+    }
+  }, [pairs, selectedPair]);
+
   // Clock
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Generate chart data when pair selected
+  // Load chart data when pair selected
   useEffect(() => {
-    if (selectedPair) {
+    let cancelled = false;
+    const loadSeries = async () => {
+      if (!selectedPair) return;
+      try {
+        const series = await fetchTimeSeries(selectedPair.symbol, '5min', 60);
+        if (cancelled) return;
+        if (series.length > 0) {
+          setChartData(series.map((point) => ({
+            time: new Date(point.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+            rate: parseFloat(point.close.toFixed(4)),
+          })));
+          return;
+        }
+      } catch {
+        // fall back to synthetic data
+      }
+
       const data: ChartPoint[] = [];
       let rate = selectedPair.rate;
       for (let i = 0; i < 30; i++) {
@@ -139,8 +167,11 @@ export default function CurrencyTrading() {
           rate: parseFloat(rate.toFixed(4)),
         });
       }
-      setChartData(data);
-    }
+      if (!cancelled) setChartData(data);
+    };
+
+    loadSeries();
+    return () => { cancelled = true; };
   }, [selectedPair]);
 
   // Live currency conversion
@@ -189,12 +220,13 @@ export default function CurrencyTrading() {
 
     // Fire notification
     const msg = `${tradeType === 'buy' ? 'Bought' : 'Sold'} $${tradeAmount.toLocaleString()} ${selectedPair.symbol} @ ${selectedPair.rate.toFixed(4)}`;
-    saveNotification({
+    notifyUser({
       type: 'large_transaction',
       title: `💱 Forex Trade: ${selectedPair.symbol}`,
       message: msg,
+      desktopTitle: 'Forex Trade Executed',
+      desktopBody: msg,
     });
-    sendBrowserNotification('Forex Trade Executed', msg);
 
     toast.success(msg);
     setTradeDialogOpen(false);
@@ -226,10 +258,12 @@ export default function CurrencyTrading() {
     savePositions(newPositions);
 
     const msg = `Position closed. P&L: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
-    saveNotification({
+    notifyUser({
       type: pnl >= 0 ? 'info' : 'budget_alert',
       title: `📊 Position Closed: ${position.pair}`,
       message: msg,
+      desktopTitle: 'Position Closed',
+      desktopBody: msg,
     });
     toast.success(msg);
   };
@@ -260,10 +294,12 @@ export default function CurrencyTrading() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Currency Trading</h1>
         <p className="text-muted-foreground">
-          Live forex rates from ExchangeRate-API • Auto-recording enabled
+          {marketStatus.configured ? 'Live forex rates via Twelve Data' : 'Standard forex rates (configure live data)'} • Auto-recording enabled
         </p>
         <div className="flex items-center gap-2 mt-2 flex-wrap">
-          <Badge variant="default" className="animate-pulse">LIVE</Badge>
+          <Badge variant={marketStatus.configured ? 'default' : 'secondary'} className={marketStatus.configured ? 'animate-pulse' : ''}>
+            {marketStatus.configured ? 'LIVE' : 'STANDARD'}
+          </Badge>
           <span className="text-sm text-muted-foreground">
             {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })} |
             {currentTime.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' })}

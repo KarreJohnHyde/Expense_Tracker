@@ -26,6 +26,24 @@ That's it! 🎉
 
 ---
 
+## Mobile HTTPS Dev (Camera + Voice)
+
+Modern mobile browsers require HTTPS to grant camera/microphone access. Use the tunnel scripts to expose a secure URL.
+
+```bash
+# 1. Add your ngrok token to .env
+NGROK_AUTHTOKEN=your_token_here
+
+# 2. Start dev server + HTTPS tunnel (one command)
+pnpm dev:tunnel
+
+# Or run separately:
+# pnpm dev:host
+# pnpm tunnel
+```
+
+Open the printed HTTPS URL on your phone and use the app features that request camera or voice access.
+
 ## Overview
 A production-ready, serverless expense tracking application with AI/ML capabilities built following AWS serverless architecture principles (Lambda + DynamoDB + API Gateway equivalent using Supabase).
 

@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useCurrency } from '../lib/currency';
-import { saveNotification, sendBrowserNotification } from '../lib/notifications';
+import { notifyUser } from '../lib/notifications';
 
 const CATEGORIES = [
   'Food & Dining',
@@ -119,12 +119,13 @@ export default function ScanReceipt() {
       toast.success('Receipt scanned successfully! ✅');
 
       // Send notification
-      saveNotification({
+      notifyUser({
         type: 'scan_complete',
         title: '📸 Receipt Scanned',
         message: `Scanned receipt: ${extracted.merchant || 'Unknown'} — ₹${extracted.total || '0'}`,
+        desktopTitle: 'Receipt Scanned',
+        desktopBody: `${extracted.merchant || 'Receipt'} processed`,
       });
-      sendBrowserNotification('Receipt Scanned', `${extracted.merchant || 'Receipt'} processed`);
     } catch (error) {
       console.error('OCR Error:', error);
       toast.error('Failed to process receipt');
@@ -255,10 +256,12 @@ export default function ScanReceipt() {
       toast.success('Product/General Barcode Detected');
     }
 
-    saveNotification({
+    notifyUser({
       type: 'scan_complete',
       title: '🔍 QR/Barcode Analyzed',
       message: decodedText.length > 50 ? decodedText.slice(0, 50) + '...' : decodedText,
+      desktopTitle: 'QR/Barcode Scanned',
+      desktopBody: decodedText.length > 50 ? decodedText.slice(0, 50) + '...' : decodedText,
     });
   };
 

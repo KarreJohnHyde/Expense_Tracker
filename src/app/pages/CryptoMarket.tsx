@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -21,12 +21,15 @@ import {
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useCurrency } from '../lib/currency';
+import { fetchQuotes, fetchTimeSeries, getMarketStatus } from '../lib/marketData';
+import { CryptoPrediction } from '../components/CryptoPrediction';
 
 interface Crypto {
   id: string;
   symbol: string;
   name: string;
   type: string;
+  apiSymbol?: string;
   price: number;
   change: number;
   changePercent: number;
@@ -53,7 +56,7 @@ interface ChartPoint {
 
 const TYPES = ['All', 'Layer 1', 'Layer 2', 'DeFi', 'Meme', 'Exchange', 'Oracle', 'Stablecoin', 'Gaming', 'AI', 'Privacy'];
 
-// 25 major cryptocurrencies
+// 25 major cryptocurrencies (fallback seed data)
 const MOCK_CRYPTO: Crypto[] = [
   { id: '1', symbol: 'BTC', name: 'Bitcoin', type: 'Layer 1', price: 65000.50, change: 1200.30, changePercent: 1.88, volume: 35000000000, marketCap: 1250000000000, high: 66000, low: 63800, open: 63800.20 },
   { id: '2', symbol: 'ETH', name: 'Ethereum', type: 'Layer 1', price: 3450.75, change: -45.25, changePercent: -1.29, volume: 15000000000, marketCap: 415000000000, high: 3550, low: 3420, open: 3496 },
@@ -82,10 +85,15 @@ const MOCK_CRYPTO: Crypto[] = [
   { id: '25', symbol: 'USDC', name: 'USD Coin', type: 'Stablecoin', price: 1.00, change: 0.00, changePercent: -0.01, volume: 5800000000, marketCap: 33000000000, high: 1.00, low: 1.00, open: 1.00 },
 ];
 
+const CRYPTO_SEED: Crypto[] = MOCK_CRYPTO.map((c) => ({
+  ...c,
+  apiSymbol: `${c.symbol}/USD`,
+}));
+
 export default function CryptoMarket() {
   const { formatCurrency } = useCurrency();
-  const [cryptos, setCryptos] = useState<Crypto[]>(MOCK_CRYPTO);
-  const [filteredCryptos, setFilteredCryptos] = useState<Crypto[]>(MOCK_CRYPTO);
+  const [cryptos, setCryptos] = useState<Crypto[]>(CRYPTO_SEED);
+  const [filteredCryptos, setFilteredCryptos] = useState<Crypto[]>(CRYPTO_SEED);
   const [portfolio, setPortfolio] = useState<Portfolio[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState('All');
@@ -95,6 +103,9 @@ export default function CryptoMarket() {
   const [tradeQuantity, setTradeQuantity] = useState(1);
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState('');
+  const marketStatus = getMarketStatus();
 
   // Update current time every second
   useEffect(() => {
@@ -104,28 +115,52 @@ export default function CryptoMarket() {
     return () => clearInterval(timer);
   }, []);
 
-  // Simulate real-time price updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCryptos((prev: Crypto[]) =>
-        prev.map((crypto: Crypto) => {
-          const priceChange = (Math.random() - 0.5) * (crypto.price * 0.005);
-          const newPrice = Math.max(crypto.price + priceChange, 0.01);
-          const change = newPrice - crypto.open;
-          const changePercent = (change / crypto.open) * 100;
-
-          return {
-            ...crypto,
-            price: parseFloat(newPrice.toFixed(4)),
-            change: parseFloat(change.toFixed(4)),
-            changePercent: parseFloat(changePercent.toFixed(2)),
-          };
-        })
-      );
-    }, 2000); // Update every 2 seconds for crypto
-
-    return () => clearInterval(interval);
+  const loadQuotes = useCallback(async () => {
+    try {
+      const symbols = CRYPTO_SEED.map((c) => c.apiSymbol || `${c.symbol}/USD`);
+      const quotes = await fetchQuotes(symbols);
+      const updated = CRYPTO_SEED.map((seed) => {
+        const quote = quotes[seed.apiSymbol || ''] || quotes[seed.symbol] || quotes[`${seed.symbol}/USD`];
+        if (!quote) return seed;
+        const price = quote.price || seed.price;
+        const open = quote.open ?? seed.open;
+        const previousClose = quote.previousClose ?? open;
+        const change = quote.change ?? (price - previousClose);
+        const changePercent = quote.changePercent ?? (previousClose ? (change / previousClose) * 100 : 0);
+        return {
+          ...seed,
+          price: parseFloat(price.toFixed(4)),
+          open,
+          high: quote.high ?? seed.high,
+          low: quote.low ?? seed.low,
+          volume: quote.volume ?? seed.volume,
+          change: parseFloat(change.toFixed(4)),
+          changePercent: parseFloat(changePercent.toFixed(2)),
+        };
+      });
+      setCryptos(updated);
+      setLastUpdated(new Date().toLocaleTimeString('en-IN'));
+    } catch {
+      // Keep seed data if live fetch fails
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadQuotes();
+    const interval = setInterval(loadQuotes, 15000);
+    return () => clearInterval(interval);
+  }, [loadQuotes]);
+
+  useEffect(() => {
+    if (selectedCrypto) {
+      const updated = cryptos.find((c) => c.id === selectedCrypto.id);
+      if (updated && updated !== selectedCrypto) {
+        setSelectedCrypto(updated);
+      }
+    }
+  }, [cryptos, selectedCrypto]);
 
   // Filter 
   useEffect(() => {
@@ -144,7 +179,23 @@ export default function CryptoMarket() {
 
   // Generate chart data
   useEffect(() => {
-    if (selectedCrypto) {
+    let cancelled = false;
+    const loadSeries = async () => {
+      if (!selectedCrypto) return;
+      try {
+        const series = await fetchTimeSeries(selectedCrypto.apiSymbol || `${selectedCrypto.symbol}/USD`, '1h', 48);
+        if (cancelled) return;
+        if (series.length > 0) {
+          setChartData(series.map((p) => ({
+            time: new Date(p.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+            price: parseFloat(p.close.toFixed(4)),
+          })));
+          return;
+        }
+      } catch {
+        // fall back
+      }
+
       const data: ChartPoint[] = [];
       let price = selectedCrypto.open;
       for (let i = 0; i < 24; i++) {
@@ -156,8 +207,11 @@ export default function CryptoMarket() {
           price: parseFloat(price.toFixed(4)),
         });
       }
-      setChartData(data);
-    }
+      if (!cancelled) setChartData(data);
+    };
+
+    loadSeries();
+    return () => { cancelled = true; };
   }, [selectedCrypto]);
 
   const handleBuy = () => {
@@ -241,13 +295,25 @@ export default function CryptoMarket() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Crypto Market</h1>
         <p className="text-muted-foreground">
-          Real-time cryptocurrency trading and portfolio management
+          {marketStatus.configured ? 'Live crypto prices via Twelve Data' : 'Demo crypto prices (configure live data)'}
         </p>
         <div className="flex items-center gap-2 mt-2">
-          <Badge variant="default" className="animate-pulse">24/7 LIVE</Badge>
+          <Badge variant={marketStatus.configured ? 'default' : 'secondary'} className={marketStatus.configured ? 'animate-pulse' : ''}>
+            {marketStatus.configured ? '24/7 LIVE' : 'DEMO'}
+          </Badge>
           <span className="text-sm text-muted-foreground">
             {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
           </span>
+          {lastUpdated && (
+            <Badge variant="outline" className="text-xs">
+              Updated: {lastUpdated}
+            </Badge>
+          )}
+          {loading && (
+            <Badge variant="outline" className="text-xs">
+              Updating…
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -331,7 +397,7 @@ export default function CryptoMarket() {
       <Card>
         <CardHeader>
           <CardTitle>Crypto Prices</CardTitle>
-          <CardDescription>Real-time updates</CardDescription>
+          <CardDescription>Live crypto prices (auto-refreshes every 15 seconds)</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
@@ -416,6 +482,10 @@ export default function CryptoMarket() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {selectedCrypto && (
+        <CryptoPrediction crypto={selectedCrypto} />
       )}
 
       <Dialog open={tradeDialogOpen} onOpenChange={setTradeDialogOpen}>
