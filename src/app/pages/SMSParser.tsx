@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router';
+import { motion } from 'motion/react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -20,9 +22,21 @@ import { saveNotification, sendBrowserNotification } from '../lib/notifications'
 
 export default function SMSParser() {
   const { formatCurrency } = useCurrency();
+  const location = useLocation();
   const [smsText, setSmsText] = useState('');
   const [results, setResults] = useState<ParsedTransaction[]>([]);
   const [saved, setSaved] = useState<Set<number>>(new Set());
+
+  // Intercept Web Share Target API payload
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const sharedText = params.get('text') || params.get('title');
+    if (sharedText) {
+      setSmsText(sharedText);
+      // Clean up URL natively
+      window.history.replaceState({}, document.title, location.pathname);
+    }
+  }, [location]);
 
   const handleParse = () => {
     if (!smsText.trim()) {
@@ -117,7 +131,7 @@ Rs.15,000 has been credited to your A/c no. XX3456 by NEFT. Ref: NEFT123456. Avl
             className="w-full min-h-[200px] p-4 rounded-lg border bg-muted text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary"
             placeholder={`Paste your bank SMS messages here...\n\nExample:\nRs.5,000.00 debited from A/c XX1234 on 27-Mar-26. UPI Ref: 409876543210. Avl Bal Rs.25,432.50 -SBI\n\nSeparate multiple messages with blank lines.`}
             value={smsText}
-            onChange={(e: any) => setSmsText(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSmsText(e.target.value)}
           />
           <div className="flex gap-2">
             <Button className="flex-1" onClick={handleParse}>
@@ -187,8 +201,14 @@ Rs.15,000 has been credited to your A/c no. XX3456 by NEFT. Ref: NEFT123456. Avl
 
           {/* Transaction Cards */}
           {results.map((txn: ParsedTransaction, i: number) => (
-            <Card key={i} className={`transition-all ${saved.has(i) ? 'opacity-60 border-green-300' : ''}`}>
-              <CardContent className="p-4">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              key={i}
+            >
+              <Card className={`transition-all ${saved.has(i) ? 'opacity-60 border-green-300' : ''}`}>
+                <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3">
                     <div className={`p-2 rounded-full mt-1 ${txn.type === 'credit' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
@@ -231,6 +251,7 @@ Rs.15,000 has been credited to your A/c no. XX3456 by NEFT. Ref: NEFT123456. Avl
                 </div>
               </CardContent>
             </Card>
+            </motion.div>
           ))}
         </div>
       )}

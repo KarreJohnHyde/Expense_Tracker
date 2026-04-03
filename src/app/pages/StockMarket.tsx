@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -163,7 +164,11 @@ export default function StockMarket() {
       );
     }
 
-    setFilteredStocks(filtered);
+    const timer = setTimeout(() => {
+      setFilteredStocks(filtered);
+    }, 300);
+    
+    return () => clearTimeout(timer);
   }, [stocks, selectedSector, searchQuery]);
 
   useEffect(() => {
@@ -374,8 +379,11 @@ export default function StockMarket() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {filteredStocks.map(stock => (
-              <div
+            {filteredStocks.map((stock, i) => (
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
                 key={stock.id}
                 className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent cursor-pointer transition-colors"
                 onClick={() => {
@@ -428,7 +436,7 @@ export default function StockMarket() {
                     Sell
                   </Button>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </CardContent>

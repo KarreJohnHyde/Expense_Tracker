@@ -9,7 +9,6 @@ import { Camera, Plus, Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { Badge } from './ui/badge';
-import Tesseract from 'tesseract.js';
 import { useCurrency } from '../lib/currency';
 
 const CATEGORIES = [
@@ -34,11 +33,20 @@ const PAYMENT_METHODS = [
 
 interface AddExpenseDialogProps {
   onExpenseAdded: () => void;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  initialData?: Record<string, unknown>;
 }
 
-export function AddExpenseDialog({ onExpenseAdded }: AddExpenseDialogProps) {
+export function AddExpenseDialog({ onExpenseAdded, isOpen, onOpenChange, initialData }: AddExpenseDialogProps) {
   const { currency, convertToBase } = useCurrency();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isOpen !== undefined ? isOpen : internalOpen;
+  
+  const setOpen = (newOpen: boolean) => {
+    setInternalOpen(newOpen);
+    if (onOpenChange) onOpenChange(newOpen);
+  };
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -54,10 +62,16 @@ export function AddExpenseDialog({ onExpenseAdded }: AddExpenseDialogProps) {
 
   // AI Auto-categorization
   useEffect(() => {
+    if (initialData && open) {
+      setFormData(prev => ({ ...prev, ...initialData }));
+    }
+  }, [initialData, open]);
+
+  useEffect(() => {
     if (formData.description && formData.description.length > 3) {
       const timer = setTimeout(() => {
         handleAICategorization();
-      }, 500);
+      }, 800);
       return () => clearTimeout(timer);
     }
   }, [formData.description]);
@@ -104,8 +118,8 @@ export function AddExpenseDialog({ onExpenseAdded }: AddExpenseDialogProps) {
       });
       setAiSuggestion(null);
       onExpenseAdded();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to add expense');
+    } catch (error) {
+      toast.error((error as Error).message || 'Failed to add expense');
     } finally {
       setLoading(false);
     }
@@ -116,7 +130,9 @@ export function AddExpenseDialog({ onExpenseAdded }: AddExpenseDialogProps) {
   const processImageWithTesseract = async (imageSrc: string) => {
     setLoading(true);
     try {
-      const result = await Tesseract.recognize(imageSrc, 'eng', { logger: m => console.log(m) });
+      const tesseractMod = await import('tesseract.js');
+      const recognize = tesseractMod.recognize || tesseractMod.default?.recognize || tesseractMod.default;
+      const result = await recognize(imageSrc, 'eng', { logger: (m: any) => console.log(m) });
       const text = result.data.text;
       
       // Simple extraction regexes

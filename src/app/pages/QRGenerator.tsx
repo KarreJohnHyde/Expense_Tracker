@@ -76,9 +76,9 @@ export default function QRGenerator() {
         const apiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(upiUrl)}`;
         setQrDataUrl(apiUrl);
       }
-
       toast.success('QR Code generated!');
-    } catch {
+    } catch (error) {
+      console.error(error);
       toast.error('Failed to generate QR code');
     } finally {
       setGenerating(false);
@@ -139,7 +139,7 @@ export default function QRGenerator() {
                 <Input
                   placeholder="username@bankhandle"
                   value={upiId}
-                  onChange={(e: any) => setUpiId(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUpiId(e.target.value)}
                   className="flex-1"
                 />
                 <Button variant="outline" size="icon" onClick={copyUpiId} title="Copy UPI ID">
@@ -168,7 +168,7 @@ export default function QRGenerator() {
               <Input
                 placeholder="Your name or business name"
                 value={payeeName}
-                onChange={(e: any) => setPayeeName(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPayeeName(e.target.value)}
               />
             </div>
 
@@ -198,7 +198,7 @@ export default function QRGenerator() {
                 type="number"
                 placeholder="0.00"
                 value={amount}
-                onChange={(e: any) => setAmount(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAmount(e.target.value)}
                 min="0"
                 step="0.01"
               />
@@ -210,7 +210,7 @@ export default function QRGenerator() {
               <Input
                 placeholder="Payment for..."
                 value={note}
-                onChange={(e: any) => setNote(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)}
               />
             </div>
 

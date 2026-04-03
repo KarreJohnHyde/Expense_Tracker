@@ -20,6 +20,7 @@ import {
   QrCode,
   ChevronLeft,
   ChevronRight,
+  Webhook,
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useState, useEffect } from 'react';
@@ -40,6 +41,7 @@ const navigation = [
   { name: 'Bank SMS', href: '/sms-parser', icon: MessageSquare },
   { name: 'Scan Receipt', href: '/scan-receipt', icon: ScanLine },
   { name: 'QR Generator', href: '/qr-generator', icon: QrCode },
+  { name: 'Automations', href: '/automations', icon: Webhook },
   { name: 'Profile', href: '/profile', icon: User },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
@@ -182,13 +184,16 @@ export default function Root() {
               <p className="text-xs text-muted-foreground">Smart Tracker</p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
-          </Button>
+          <div className="flex items-center gap-2">
+            <NotificationsPanel />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+            </Button>
+          </div>
         </div>
 
         {/* Mobile menu */}

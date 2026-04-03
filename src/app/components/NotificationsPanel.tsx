@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import {
@@ -65,6 +66,31 @@ export function NotificationsPanel() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [filter, setFilter] = useState('all');
   const panelRef = useRef<HTMLDivElement>(null);
+  const bellBtnRef = useRef<HTMLButtonElement>(null);
+  
+  // Dragging & Positioning State
+  const [position, setPosition] = useState({ x: window.innerWidth / 2 - 250, y: 80 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Only start drag if clicking the header explicitly, not buttons
+    if ((e.target as HTMLElement).closest('button')) return;
+    setIsDragging(true);
+    dragStart.current = { x: e.clientX - position.x, y: e.clientY - position.y };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDragging) {
+      setPosition({ x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y });
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    setIsDragging(false);
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
 
   const reload = () => {
     setNotifications(getNotifications());
@@ -129,10 +155,25 @@ export function NotificationsPanel() {
     <div className="relative" ref={panelRef}>
       {/* Bell Button */}
       <Button
+        ref={bellBtnRef}
         variant="ghost"
         size="icon"
         className="relative"
-        onClick={() => { setOpen(!open); if (!open) reload(); }}
+        onClick={() => { 
+          if (!open) {
+            reload();
+            if (bellBtnRef.current) {
+              const rect = bellBtnRef.current.getBoundingClientRect();
+              // Spawn exactly to the right of the button on Desktop, or centered on mobile
+              const isMobile = window.innerWidth < 640;
+              setPosition({
+                x: isMobile ? 16 : rect.right + 16,
+                y: isMobile ? 80 : rect.top
+              });
+            }
+          }
+          setOpen(!open); 
+        }}
       >
         <Bell className={`size-5 ${unreadCount > 0 ? 'text-primary' : ''}`} />
         {unreadCount > 0 && (
@@ -142,11 +183,30 @@ export function NotificationsPanel() {
         )}
       </Button>
 
-      {/* Dropdown Panel — fixed to viewport on mobile, absolute on desktop */}
-      {open && (
-        <div className="fixed inset-x-4 top-16 sm:inset-auto sm:absolute sm:right-0 sm:top-12 sm:w-[420px] max-h-[80vh] sm:max-h-[520px] bg-card border rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b bg-muted/30">
+      {/* Dropdown Panel — Enlarged, Dragable, and Positioned to the Right via React Portal */}
+      {open && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed w-[calc(100vw-32px)] sm:w-[500px] max-h-[80vh] sm:max-h-[700px] bg-card border shadow-2xl z-[100] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          style={{ 
+            left: 0, top: 0,
+            transform: `translate(${position.x}px, ${position.y}px)`,
+            cursor: isDragging ? 'grabbing' : 'auto',
+            borderRadius: '16px' // Modern smoothed aesthetic
+          }}
+        >
+          {/* Drag Handle - Outer Edges (Top, Bottom, Left, Right invisibly absolute) */}
+          <div className="absolute top-0 inset-x-0 h-3 cursor-grab z-50" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} />
+          <div className="absolute bottom-0 inset-x-0 h-3 cursor-grab z-50" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} />
+          <div className="absolute inset-y-0 left-0 w-3 cursor-grab z-50" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} />
+          <div className="absolute inset-y-0 right-0 w-3 cursor-grab z-50" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} />
+
+          {/* Header - Drag Handle Native Top */}
+          <div 
+            className="flex items-center justify-between p-4 pt-5 border-b bg-muted/30 cursor-grab active:cursor-grabbing relative z-40"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+          >
             <div className="flex items-center gap-2">
               <Bell className="size-4 text-primary" />
               <h3 className="font-semibold">Notifications</h3>
@@ -214,21 +274,21 @@ export function NotificationsPanel() {
                     <div className={`p-2 rounded-full mt-0.5 flex-shrink-0 ${colorClass}`}>
                       <IconComponent className="size-4" />
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 pr-4">
                       <p className={`text-sm leading-tight ${!notif.read ? 'font-semibold' : 'font-medium text-muted-foreground'}`}>
                         {notif.title}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{notif.message}</p>
-                      <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wide">{timeAgo(notif.timestamp)}</p>
+                      <p className="text-secondary-foreground mt-1 line-clamp-3 text-sm">{notif.message}</p>
+                      <p className="text-[11px] text-muted-foreground mt-2 uppercase tracking-wider">{timeAgo(notif.timestamp)}</p>
                     </div>
-                    <div className="flex gap-0.5 flex-shrink-0">
+                    <div className="flex flex-col gap-1 flex-shrink-0">
                       {!notif.read && (
-                        <Button variant="ghost" size="icon" className="size-6" onClick={() => handleMarkRead(notif.id)} title="Mark read">
-                          <Check className="size-3" />
+                        <Button variant="ghost" size="icon" className="size-8" onClick={() => handleMarkRead(notif.id)} title="Mark read">
+                          <Check className="size-4 text-green-500" />
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:text-destructive" onClick={() => handleDismiss(notif.id)} title="Dismiss">
-                        <X className="size-3" />
+                      <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => handleDismiss(notif.id)} title="Dismiss">
+                        <X className="size-4" />
                       </Button>
                     </div>
                   </div>
@@ -246,7 +306,7 @@ export function NotificationsPanel() {
             </div>
           )}
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }

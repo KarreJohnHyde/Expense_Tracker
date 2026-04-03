@@ -4,6 +4,7 @@ import { ExpenseList } from '../components/ExpenseList';
 import { AIInsights } from '../components/AIInsights';
 import { StatsCards } from '../components/StatsCards';
 import { SpendingChart } from '../components/SpendingChart';
+import { VoiceExpenseInput } from '../components/VoiceExpenseInput';
 import { api } from '../lib/api';
 import { Skeleton } from '../components/ui/skeleton';
 import { toast } from 'sonner';
@@ -31,6 +32,9 @@ export default function Dashboard() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
+
+  const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
+  const [voicePrefillData, setVoicePrefillData] = useState<any>(null);
 
   const user = auth.getCurrentUser();
   const now = new Date();
@@ -161,7 +165,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* ── Welcome Banner ───────────────────────────────────────── */}
-      <div className="animate-fade-in-up relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 p-6 lg:p-8 text-white">
+      <div className="animate-fade-in-up relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 p-6 lg:p-8 text-white">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImciIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjA4KSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3QgZmlsbD0idXJsKCNnKSIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIvPjwvc3ZnPg==')] opacity-50" />
         <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div>
@@ -184,7 +188,18 @@ export default function Dashboard() {
               <Sparkles className="size-4" />
               AI insights active
             </div>
-            <AddExpenseDialog onExpenseAdded={loadExpenses} />
+            <VoiceExpenseInput 
+              onTranscribed={(_text, data) => {
+                setVoicePrefillData(data);
+                setIsAddExpenseOpen(true);
+              }} 
+            />
+            <AddExpenseDialog 
+              onExpenseAdded={loadExpenses} 
+              isOpen={isAddExpenseOpen}
+              onOpenChange={setIsAddExpenseOpen}
+              initialData={voicePrefillData}
+            />
           </div>
         </div>
       </div>

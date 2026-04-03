@@ -11,6 +11,7 @@ import ScanReceipt from "./pages/ScanReceipt";
 import WalletTracker from "./pages/WalletTracker";
 import SMSParser from "./pages/SMSParser";
 import QRGenerator from "./pages/QRGenerator";
+import Webhooks from "./pages/Webhooks";
 import Login from "./pages/Login";
 import Root from "./pages/Root";
 import { auth } from "./lib/auth";
@@ -47,6 +48,7 @@ export const router = createBrowserRouter([
       { path: "sms-parser", Component: SMSParser },
       { path: "scan-receipt", Component: ScanReceipt },
       { path: "qr-generator", Component: QRGenerator },
+      { path: "automations", Component: Webhooks },
       { path: "profile", Component: Profile },
       { path: "settings", Component: Settings },
     ],
