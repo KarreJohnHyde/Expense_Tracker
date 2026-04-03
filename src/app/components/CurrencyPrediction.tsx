@@ -3,8 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,

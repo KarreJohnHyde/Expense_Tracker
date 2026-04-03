@@ -37,7 +37,7 @@ let mockBankAccounts: BankAccount[] = [];
 
 export const auth = {
   // Sign up with email and password
-  async signUp(email: string, password: string, username: string, fullName?: string): Promise<{ user: User | null; error: Error | null }> {
+  async signUp(email: string, _password: string, username: string, fullName?: string): Promise<{ user: User | null; error: Error | null }> {
     try {
       // In production, this would use Supabase Auth
       // For now, we'll create a mock user
@@ -86,7 +86,7 @@ export const auth = {
   },
 
   // Sign in with email and password
-  async signIn(email: string, password: string): Promise<{ user: User | null; error: Error | null }> {
+  async signIn(email: string, _password: string): Promise<{ user: User | null; error: Error | null }> {
     try {
       // Check if user exists in localStorage
       const storedUser = localStorage.getItem('user');

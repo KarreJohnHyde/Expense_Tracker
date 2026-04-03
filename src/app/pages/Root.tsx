@@ -100,7 +100,7 @@ export default function Root() {
                 <p className="text-xs text-muted-foreground">AI-Powered Management</p>
               </div>
             )}
-            {isSidebarOpen && <NotificationsPanel />}
+            {isSidebarOpen && !isTouchLayout && <NotificationsPanel />}
           </div>
 
           <Button
@@ -200,7 +200,7 @@ export default function Root() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <NotificationsPanel />
+            {isTouchLayout && <NotificationsPanel />}
             <Button
               variant="ghost"
               size="icon"
@@ -239,7 +239,10 @@ export default function Root() {
 
       {/* Main content */}
       <main className={cn("transition-all duration-300", !isTouchLayout && (isSidebarOpen ? "lg:pl-64" : "lg:pl-20"))}>
-        <div className="container mx-auto px-4 py-6 sm:px-6 lg:p-8">
+        <div className={cn(
+          "container mx-auto",
+          isTouchLayout ? "px-4 py-6" : "px-4 py-6 sm:px-6 lg:p-8"
+        )}>
           <Outlet />
         </div>
       </main>

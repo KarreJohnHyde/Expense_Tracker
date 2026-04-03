@@ -38,10 +38,26 @@ interface AddExpenseDialogProps {
   onExpenseUpdated?: () => void;
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
-  initialData?: Record<string, unknown>;
+  initialData?: Partial<ExpenseSeedData>;
   mode?: 'add' | 'edit';
   expenseId?: string;
   showTrigger?: boolean;
+}
+
+interface ExpenseSeedData {
+  id: string;
+  amount: number | string;
+  category: string;
+  description: string;
+  date: string;
+  paymentMethod: string;
+  tags: string[] | string;
+  location: string;
+  notes: string;
+  recurring: boolean;
+  recurringPeriod: string;
+  splitWith: string;
+  receiptImage: string | null;
 }
 
 export function AddExpenseDialog({
@@ -57,8 +73,8 @@ export function AddExpenseDialog({
   const { currency, convertToBase } = useCurrency();
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isOpen !== undefined ? isOpen : internalOpen;
-  const isEditMode = mode === 'edit' || Boolean(expenseId) || Boolean((initialData as { id?: string } | null)?.id);
-  const resolvedExpenseId = expenseId || (initialData as { id?: string } | null)?.id;
+  const isEditMode = mode === 'edit' || Boolean(expenseId) || Boolean(initialData?.id);
+  const resolvedExpenseId = expenseId || initialData?.id;
 
   const setOpen = (newOpen: boolean) => {
     setInternalOpen(newOpen);
@@ -111,21 +127,21 @@ export function AddExpenseDialog({
   // Pre-fill from voice/initial data
   useEffect(() => {
     if (initialData && open) {
-      const data = initialData as Record<string, unknown>;
-      const incomingCategory = (data.category as string | undefined) || '';
+      const data = initialData;
+      const incomingCategory = data.category || '';
       const knownCategory = CATEGORIES.includes(incomingCategory);
 
       setFormData(prev => ({
         ...prev,
         amount: toInputAmount(data.amount),
         category: knownCategory ? incomingCategory : '',
-        description: (data.description as string | undefined) || '',
+        description: data.description || '',
         date: normalizeDate(data.date),
-        paymentMethod: (data.paymentMethod as string | undefined) || '',
-        tags: Array.isArray(data.tags) ? (data.tags as string[]).join(', ') : ((data.tags as string) || ''),
-        location: (data.location as string | undefined) || '',
-        notes: (data.notes as string | undefined) || '',
-        recurringPeriod: (data.recurringPeriod as string | undefined) || 'monthly',
+        paymentMethod: data.paymentMethod || '',
+        tags: Array.isArray(data.tags) ? data.tags.join(', ') : (data.tags || ''),
+        location: data.location || '',
+        notes: data.notes || '',
+        recurringPeriod: data.recurringPeriod || 'monthly',
       }));
 
       if (incomingCategory && !knownCategory) {
@@ -136,11 +152,11 @@ export function AddExpenseDialog({
         setCustomCategory('');
       }
 
-      const existingReceipt = (data.receiptImage as string | null | undefined) || null;
+      const existingReceipt = data.receiptImage || null;
       setReceiptPreview(existingReceipt);
       setReceiptRemoved(false);
       setIsRecurring(Boolean(data.recurring));
-      setSplitWith((data.splitWith as string | undefined) || '');
+      setSplitWith(data.splitWith || '');
       setAiSuggestion(null);
     }
   }, [initialData, open, currency.rate]);

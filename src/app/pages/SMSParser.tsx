@@ -91,7 +91,12 @@ export default function SMSParser() {
   };
 
   const loadSampleSMS = () => {
-    setSmsText(`Rs.5,000.00 debited from A/c XX1234 on 27-Mar-26. UPI Ref: 409876543210. Avl Bal Rs.25,432.50 -SBI
+    setSmsText(
+`Your a/c no. XXXXXXXX0206 is debited for Rs.600.00 on 16-03-2026 and credited to a/c no. XXXXXXXX3732 (UPI Ref no 182368770082)
+
+Your a/c no. XXXXXXXX0206 is debited for Rs.10000.00 on 03-04-2026 and credited to a/c no. XXXXXXXX2063 (UPI Ref no 121032415875)
+
+Rs.5,000.00 debited from A/c XX1234 on 27-Mar-26. UPI Ref: 409876543210. Avl Bal Rs.25,432.50 -SBI
 
 INR 2,500.00 credited to your A/c XX5678 on 26-Mar-26. IMPS Ref 987654321. Available Balance: INR 45,678.90 -HDFC Bank
 
@@ -225,6 +230,7 @@ Rs.15,000 has been credited to your A/c no. XX3456 by NEFT. Ref: NEFT123456. Avl
                         <span>📅 {new Date(txn.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                         {txn.balance !== undefined && <span>💰 Bal: {formatCurrency(txn.balance)}</span>}
                         {txn.reference && <span>🔗 Ref: {txn.reference}</span>}
+                        {txn.merchant && <span>🏪 {txn.merchant}</span>}
                       </div>
                       <p className="text-xs text-muted-foreground bg-muted p-2 rounded mt-2 max-w-lg truncate">{txn.rawMessage}</p>
                     </div>

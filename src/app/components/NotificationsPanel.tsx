@@ -169,20 +169,23 @@ export function NotificationsPanel() {
   }, []);
 
   useEffect(() => {
-    const handlePointerDown = (e: Event) => {
-      const target = e.target as Node;
-      if (panelPortalRef.current && panelPortalRef.current.contains(target)) return;
-      if (panelRef.current && panelRef.current.contains(target)) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+      const portalEl = panelPortalRef.current;
+      const anchorEl = panelRef.current;
+
+      const isInsidePortal = portalEl ? path.includes(portalEl) : false;
+      const isInsideAnchor = anchorEl ? path.includes(anchorEl) : false;
+      if (isInsidePortal || isInsideAnchor) return;
+
       setOpen(false);
       setShowSettings(false);
     };
 
     if (open) {
       document.addEventListener('pointerdown', handlePointerDown);
-      document.addEventListener('touchstart', handlePointerDown);
       return () => {
         document.removeEventListener('pointerdown', handlePointerDown);
-        document.removeEventListener('touchstart', handlePointerDown);
       };
     }
   }, [open]);

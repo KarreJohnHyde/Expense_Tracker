@@ -176,15 +176,15 @@ export async function fetchTimeSeries(
     outputsize,
   });
 
-  const values = Array.isArray(data?.values) ? data.values : [];
-  const mapped = values.map((v: any) => ({
-    time: v.datetime || v.date || v.time,
+  const values: Array<Record<string, unknown>> = Array.isArray(data?.values) ? data.values : [];
+  const mapped: TimeSeriesPoint[] = values.map((v) => ({
+    time: String(v.datetime ?? v.date ?? v.time ?? ''),
     open: parseNumber(v.open),
     high: parseNumber(v.high),
     low: parseNumber(v.low),
     close: parseNumber(v.close),
     volume: parseNumber(v.volume, 0),
   }));
-  const cleaned = mapped.filter(v => Number.isFinite(v.close));
+  const cleaned = mapped.filter((v) => Number.isFinite(v.close));
   return cleaned.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
 }
