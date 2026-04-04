@@ -1,0 +1,11 @@
+{
+  "name": "expense-backend",
+  "version": "1.0.0",
+  "description": "AWS SAM Lambda functions for expense tracking",
+  "main": "app.js",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.500.0",
+    "@aws-sdk/lib-dynamodb": "^3.500.0"
+  }
+}

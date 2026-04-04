@@ -1,21 +1,9 @@
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
-
-// Dual-mode API: set VITE_API_MODE=local in .env to route through the local webhook server
-// Set VITE_API_MODE=aws and VITE_AWS_API_URL=https://your-api.execute-api.us-east-1.amazonaws.com
+// Severed from Supabase for AWS Migration
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const _meta = (import.meta as any).env || {};
-const API_MODE = (_meta.VITE_API_MODE as string) || 'supabase';
-const LOCAL_API_URL = 'http://localhost:3001';
-const AWS_API_URL = (_meta.VITE_AWS_API_URL as string) || '';
-const SUPABASE_API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-8d54d463`;
 
-function getApiUrl(): string {
-  if (API_MODE === 'local') return LOCAL_API_URL;
-  if (API_MODE === 'aws') return AWS_API_URL;
-  return SUPABASE_API_URL;
-}
-
-const API_URL = getApiUrl();
+// Configure to hit AWS SAM Local API Gateway defaults to :3000
+const API_URL = (_meta.VITE_AWS_API_URL as string) || 'http://127.0.0.1:3000';
 
 
 export interface Expense {
@@ -130,7 +118,6 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${publicAnonKey}`,
       ...options.headers,
     },
   });

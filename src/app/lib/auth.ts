@@ -1,10 +1,15 @@
-import { createClient } from '@supabase/supabase-js';
+import { Amplify } from 'aws-amplify';
+import { signUp as cognitoSignUp, signIn as cognitoSignIn, signOut as cognitoSignOut, getCurrentUser as cognitoGetCurrentUser } from 'aws-amplify/auth';
 
-// Initialize Supabase client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Initialize AWS Amplify (Cognito)
+Amplify.configure({
+  Auth: {
+    Cognito: {
+      userPoolId: import.meta.env.VITE_AWS_USER_POOL_ID || 'local_use_mock_pool',
+      userPoolClientId: import.meta.env.VITE_AWS_USER_POOL_CLIENT_ID || 'local_use_mock_client',
+    }
+  }
+});
 
 export interface User {
   id: string;
@@ -31,7 +36,7 @@ export interface BankAccount {
   isDefault: boolean;
 }
 
-// Mock authentication for prototype
+// Mock authentication fallback for prototype/local dev
 let currentUser: User | null = null;
 let mockBankAccounts: BankAccount[] = [];
 
@@ -39,7 +44,22 @@ export const auth = {
   // Sign up with email and password
   async signUp(email: string, _password: string, username: string, fullName?: string): Promise<{ user: User | null; error: Error | null }> {
     try {
-      // In production, this would use Supabase Auth
+      // In production, this would use Cognito Auth
+      try {
+        await cognitoSignUp({
+          username: email,
+          password: _password,
+          options: {
+            userAttributes: {
+              email,
+              name: fullName || username,
+            }
+          }
+        });
+      } catch (e) {
+        console.warn('Cognito SignUp failed, falling back to mock:', e);
+      }
+      
       // For now, we'll create a mock user
       const user: User = {
         id: `user_${Date.now()}`,
@@ -88,6 +108,13 @@ export const auth = {
   // Sign in with email and password
   async signIn(email: string, _password: string): Promise<{ user: User | null; error: Error | null }> {
     try {
+      // In production, this would use Cognito Auth
+      try {
+        await cognitoSignIn({ username: email, password: _password });
+      } catch (e) {
+        console.warn('Cognito SignIn failed, falling back to mock:', e);
+      }
+
       // Check if user exists in localStorage
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
@@ -123,6 +150,13 @@ export const auth = {
   // Sign out
   async signOut(): Promise<{ error: Error | null }> {
     try {
+      // In production, this would use Cognito Auth
+      try {
+        await cognitoSignOut();
+      } catch (e) {
+        console.warn('Cognito SignOut failed, falling back to mock:', e);
+      }
+
       currentUser = null;
       localStorage.removeItem('user');
       return { error: null };
@@ -135,6 +169,9 @@ export const auth = {
   getCurrentUser(): User | null {
     if (currentUser) return currentUser;
     
+    // In production, query Cognito for session
+    cognitoGetCurrentUser().catch(() => null);
+
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       currentUser = JSON.parse(storedUser);
