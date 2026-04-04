@@ -149,6 +149,18 @@ const PATTERNS: Array<{
   //  CREDIT — account-embedded patterns
   // ══════════════════════════════════════════════════════════════════
 
+  // "Your a/c no. XXXXXXXX0206 is credited for Rs.600.00 on 02-04-2026 and debited from a/c no. XXXXXXXX1508"
+  {
+    label: 'Credited and debited from',
+    regex: new RegExp(
+      `a\\/c\\s+no\\.?\\s*(?:[Xx*]+)(\\d{4})\\s+is\\s+credited\\s+(?:for|with|by)\\s+${AMT}\\s+on\\s+[\\d-]+\\s+and\\s+debited\\s+from`,
+      'i'
+    ),
+    type: 'credit',
+    amtGroup: 2,
+    acctGroup: 1,
+  },
+
   // SBI: "Your a/c no. XXXXXXXX0206 is credited for/with Rs.600.00"
   {
     label: 'SBI a/c credited',
@@ -539,6 +551,9 @@ const BANK_KEYWORDS: Record<string, string> = {
   // Tamilnad Mercantile Bank
   TMBSMS: 'Tamilnad Mercantile Bank',
   TMB: 'Tamilnad Mercantile Bank',
+
+  // City Union Bank
+  CUB: 'City Union Bank',
 
   // Kerala Gramin Bank / etc (regional)
   KGB: 'Kerala Gramin Bank',

@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { ScrollArea } from './ui/scroll-area';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from './ui/dropdown-menu';
 import {
   Bell,
   BellOff,
-  X,
   Check,
   CheckCheck,
   Trash2,
@@ -22,6 +23,8 @@ import {
   Volume2,
   VolumeX,
   Moon,
+  MoreVertical,
+  CheckCircle2,
 } from 'lucide-react';
 import { Input } from './ui/input';
 import { Switch } from './ui/switch';
@@ -66,9 +69,9 @@ const COLOR_MAP: Record<string, string> = {
 };
 
 const PRIORITY_MAP: Record<string, string> = {
-  high: 'bg-red-500',
+  high: 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]',
   medium: 'bg-yellow-500',
-  low: 'bg-gray-400',
+  low: 'bg-slate-400',
 };
 
 const FILTER_OPTIONS = [
@@ -119,42 +122,6 @@ export function NotificationsPanel() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [filter, setFilter] = useState('all');
   const [prefs, setPrefs] = useState(getPreferences());
-  const [snoozeMenu, setSnoozeMenu] = useState<string | null>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const panelPortalRef = useRef<HTMLDivElement>(null);
-  const bellBtnRef = useRef<HTMLButtonElement>(null);
-
-  // Dragging
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStart = useRef({ x: 0, y: 0 });
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('button')) return;
-    setIsDragging(true);
-    dragStart.current = { x: e.clientX - position.x, y: e.clientY - position.y };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  };
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isDragging) setPosition({ x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y });
-  };
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    setIsDragging(false);
-    e.currentTarget.releasePointerCapture(e.pointerId);
-  };
-
-  // Touch swipe-to-dismiss per item
-  const touchStart = useRef<Record<string, number>>({});
-  const handleTouchStart = (id: string, e: React.TouchEvent) => {
-    touchStart.current[id] = e.touches[0].clientX;
-  };
-  const handleTouchEnd = (id: string, e: React.TouchEvent) => {
-    const startX = touchStart.current[id];
-    if (startX === undefined) return;
-    const diff = startX - e.changedTouches[0].clientX;
-    if (diff > 80) dismissNotification(id);
-    delete touchStart.current[id];
-  };
 
   const reload = () => {
     setNotifications(getNotifications());
@@ -167,41 +134,6 @@ export function NotificationsPanel() {
     window.addEventListener('notifications-changed', reload);
     return () => window.removeEventListener('notifications-changed', reload);
   }, []);
-
-  useEffect(() => {
-    const handlePointerDown = (e: PointerEvent) => {
-      const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
-      const portalEl = panelPortalRef.current;
-      const anchorEl = panelRef.current;
-
-      const isInsidePortal = portalEl ? path.includes(portalEl) : false;
-      const isInsideAnchor = anchorEl ? path.includes(anchorEl) : false;
-      if (isInsidePortal || isInsideAnchor) return;
-
-      setOpen(false);
-      setShowSettings(false);
-    };
-
-    if (open) {
-      document.addEventListener('pointerdown', handlePointerDown);
-      return () => {
-        document.removeEventListener('pointerdown', handlePointerDown);
-      };
-    }
-  }, [open]);
-
-  const openPanel = () => {
-    if (!open && bellBtnRef.current) {
-      const rect = bellBtnRef.current.getBoundingClientRect();
-      const isMobile = window.innerWidth < 640 || window.matchMedia('(pointer: coarse)').matches;
-      setPosition({
-        x: isMobile ? 8 : Math.min(rect.right + 12, window.innerWidth - 520),
-        y: isMobile ? 72 : rect.top,
-      });
-    }
-    reload();
-    setOpen(!open);
-  };
 
   const timeAgo = (ts: string) => {
     const diff = Date.now() - new Date(ts).getTime();
@@ -216,6 +148,7 @@ export function NotificationsPanel() {
   const filteredNotifications = filter === 'all'
     ? notifications
     : notifications.filter(n => n.type === filter);
+  
   const grouped = groupByDate(filteredNotifications);
   const GROUP_ORDER = ['Today', 'Yesterday', 'This Week', 'Older'];
 
@@ -241,326 +174,333 @@ export function NotificationsPanel() {
     setPrefs({ ...prefs, ...next });
   };
 
-  const dndActive = (() => {
-    if (!prefs.dndEnabled) return false;
-    const [sh, sm] = prefs.dndStart.split(':').map(Number);
-    const [eh, em] = prefs.dndEnd.split(':').map(Number);
-    if (Number.isNaN(sh) || Number.isNaN(sm) || Number.isNaN(eh) || Number.isNaN(em)) return false;
-    const now = new Date();
-    const current = now.getHours() * 60 + now.getMinutes();
-    const start = sh * 60 + sm;
-    const end = eh * 60 + em;
-    if (start === end) return false;
-    if (start < end) return current >= start && current < end;
-    return current >= start || current < end;
-  })();
 
   return (
-    <div className="relative" ref={panelRef}>
-      {/* Bell Button */}
-      <Button
-        ref={bellBtnRef}
-        variant="ghost"
-        size="icon"
-        className="relative"
-        onClick={openPanel}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="icon" className="relative focus-visible:ring-1 focus-visible:ring-offset-1 ring-primary overflow-visible">
+          <Bell className={`size-5 transition-transform ${unreadCount > 0 ? 'text-primary animate-pulse' : ''}`} />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 size-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-bold shadow-sm shadow-red-500/50">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+
+      <PopoverContent 
+        align="end" 
+        className="w-[calc(100vw-32px)] sm:w-[480px] p-0 overflow-hidden shadow-xl border-border rounded-xl"
+        onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <Bell className={`size-5 ${unreadCount > 0 ? 'text-primary animate-pulse' : ''}`} />
-        {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 size-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center font-bold">
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
-        )}
-      </Button>
-
-      {/* Portal Panel */}
-      {open && typeof document !== 'undefined' && createPortal(
-        <div
-          ref={panelPortalRef}
-          className="fixed w-[calc(100vw-16px)] sm:w-[480px] max-h-[85vh] bg-card border shadow-2xl z-[100] flex flex-col overflow-hidden rounded-2xl"
-          style={{
-            left: 0, top: 0,
-            transform: `translate(${position.x}px, ${position.y}px)`,
-            cursor: isDragging ? 'grabbing' : 'auto',
-          }}
-        >
-          {/* Drag handles */}
-          {(['top', 'bottom', 'left', 'right'] as const).map(d => (
-            <div key={d} className={`absolute cursor-grab z-50 ${d === 'top' ? 'top-0 inset-x-0 h-3' : d === 'bottom' ? 'bottom-0 inset-x-0 h-3' : d === 'left' ? 'inset-y-0 left-0 w-3' : 'inset-y-0 right-0 w-3'}`}
-              onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} />
-          ))}
-
-          {/* Header */}
-          <div
-            className="flex items-center justify-between p-4 pt-5 border-b bg-muted/30 cursor-grab active:cursor-grabbing relative z-40"
-            onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}
-          >
+        {/* Header */}
+        <div className="flex flex-col border-b bg-card">
+          <div className="flex items-center justify-between p-4 pb-3">
             <div className="flex items-center gap-2">
-              <Bell className="size-4 text-primary" />
-              <h3 className="font-semibold">Notifications</h3>
-              {unreadCount > 0 && <Badge variant="destructive" className="text-xs px-1.5 py-0.5">{unreadCount}</Badge>}
+              <div className="bg-primary/10 p-1.5 rounded-full">
+                <Bell className="size-4 text-primary" />
+              </div>
+              <h3 className="font-semibold text-foreground tracking-tight text-base">Notifications</h3>
+              {unreadCount > 0 && <Badge variant="default" className="text-[10px] ml-1 h-5 px-1.5 shadow-sm">{unreadCount} unread</Badge>}
             </div>
+            
             <div className="flex items-center gap-1">
-              {unreadCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={() => { markAllAsRead(); reload(); }} className="text-xs h-7 px-2">
-                  <CheckCheck className="size-3.5 mr-1" /> Read all
-                </Button>
-              )}
-              {notifications.length > 0 && (
-                <Button variant="ghost" size="sm" onClick={() => { clearAllNotifications(); reload(); }} className="text-xs h-7 px-2 text-destructive hover:text-destructive">
-                  <Trash2 className="size-3.5 mr-1" /> Clear
-                </Button>
-              )}
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-xs gap-1.5"
+                className={`h-8 px-2 text-xs flex items-center gap-1.5 ${showSettings ? 'bg-accent text-accent-foreground' : ''}`}
                 onClick={() => setShowSettings(!showSettings)}
                 title="Settings"
               >
-                <Settings className="size-3.5" />
+                <Settings className={`size-3.5 transition-transform ${showSettings ? 'rotate-90' : ''}`} />
                 Settings
               </Button>
-              {dndActive && (
-                <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
-                  DND
-                </Badge>
-              )}
-              <Button variant="ghost" size="icon" className="size-7" onClick={() => setOpen(false)}>
-                <X className="size-4" />
-              </Button>
             </div>
           </div>
-
-          {/* Settings Panel */}
-          {showSettings && (
-            <div className="border-b bg-muted/10 p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">Notification Settings</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs h-7"
-                  onClick={async () => { await requestNotificationPermission(); reload(); }}
-                >
-                  Request Permission
-                </Button>
-              </div>
-
-              <div className="grid gap-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-xs">Sound Alerts</Label>
-                    <p className="text-[11px] text-muted-foreground">Play a short sound on new alerts</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {prefs.soundEnabled ? <Volume2 className="size-4 text-primary" /> : <VolumeX className="size-4 text-muted-foreground" />}
-                    <Switch
-                      checked={prefs.soundEnabled}
-                      onCheckedChange={() => updatePrefs({ soundEnabled: !prefs.soundEnabled })}
-                      aria-label="Toggle notification sound"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-xs">Desktop Notifications</Label>
-                    <p className="text-[11px] text-muted-foreground">Show browser notifications</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {prefs.desktopEnabled ? <Bell className="size-4 text-primary" /> : <BellOff className="size-4 text-muted-foreground" />}
-                    <Switch
-                      checked={prefs.desktopEnabled}
-                      onCheckedChange={() => updatePrefs({ desktopEnabled: !prefs.desktopEnabled })}
-                      aria-label="Toggle desktop notifications"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-xs">Do Not Disturb</Label>
-                    <p className="text-[11px] text-muted-foreground">Silence alerts during quiet hours</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Moon className={`size-4 ${prefs.dndEnabled ? 'text-primary' : 'text-muted-foreground'}`} />
-                    <Switch
-                      checked={prefs.dndEnabled}
-                      onCheckedChange={() => updatePrefs({ dndEnabled: !prefs.dndEnabled })}
-                      aria-label="Toggle do not disturb"
-                    />
-                  </div>
+          
+          {/* Controls sub-header (hidden if settings open) */}
+          {!showSettings && (
+            <div className="flex items-center justify-between px-4 pb-3 pt-0">
+              <div className="flex items-center gap-2">
+                <Filter className="size-3.5 text-muted-foreground mr-1" />
+                <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto snap-x no-scrollbar">
+                  {FILTER_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setFilter(opt.key)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 snap-start ${
+                        filter === opt.key
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'bg-muted/50 hover:bg-muted text-foreground'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
               </div>
-
-              {prefs.dndEnabled && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider">From</label>
-                    <Input
-                      type="time"
-                      value={prefs.dndStart}
-                      onChange={(e) => updatePrefs({ dndStart: e.target.value })}
-                      className="h-7 text-xs"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider">To</label>
-                    <Input
-                      type="time"
-                      value={prefs.dndEnd}
-                      onChange={(e) => updatePrefs({ dndEnd: e.target.value })}
-                      className="h-7 text-xs"
-                    />
-                  </div>
-                </div>
-              )}
-
-              <p className="text-xs text-muted-foreground">Toggle notification types:</p>
-              <div className="flex flex-wrap gap-2">
-                {(Object.keys(TYPE_LABELS) as NotificationType[]).map(type => (
-                  <button
-                    key={type}
-                    onClick={() => toggleType(type)}
-                    aria-pressed={prefs.enabledTypes.includes(type)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-                      prefs.enabledTypes.includes(type)
-                        ? 'bg-primary/10 border-primary/50 text-primary'
-                        : 'bg-muted/60 border-transparent text-muted-foreground'
-                    }`}
-                  >
-                    {TYPE_LABELS[type]}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Filter Bar */}
-          <div className="flex items-center gap-1 p-2 border-b overflow-x-auto">
-            <Filter className="size-3.5 text-muted-foreground flex-shrink-0 ml-1" />
-            {FILTER_OPTIONS.map((opt) => (
-              <button
-                key={opt.key}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                  filter === opt.key
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-                }`}
-                onClick={() => setFilter(opt.key)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Notifications List */}
-          <div className="overflow-y-auto flex-1">
-            {filteredNotifications.length === 0 ? (
-              <div className="p-10 text-center text-muted-foreground">
-                <Bell className="size-12 mx-auto mb-3 opacity-20" />
-                <p className="text-sm font-medium">
-                  {filter === 'all' ? 'No notifications' : `No ${filter.replace('_', ' ')} notifications`}
-                </p>
-                <p className="text-xs mt-1">You'll see alerts for budgets, trades, SMS, and more here</p>
-              </div>
-            ) : (
-              GROUP_ORDER.filter(g => grouped[g]?.length).map(group => (
-                <div key={group}>
-                  <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest bg-muted/20 border-b sticky top-0">
-                    {group}
-                  </div>
-                  {grouped[group].map((notif) => {
-                    const IconComponent = ICON_MAP[notif.type] || Info;
-                    const colorClass = COLOR_MAP[notif.type] || COLOR_MAP.info;
-                    const priorityDot = PRIORITY_MAP[notif.priority] || PRIORITY_MAP.medium;
-
-                    return (
-                      <div
-                        key={notif.id}
-                        className={`flex items-start gap-3 p-3 border-b last:border-b-0 transition-all select-none ${
-                          !notif.read ? 'bg-primary/5 border-l-2 border-l-primary' : 'hover:bg-muted/30'
-                        } ${notif.actionUrl ? 'cursor-pointer' : 'cursor-default'}`}
-                        onClick={() => handleNotifClick(notif)}
-                        onTouchStart={(e) => handleTouchStart(notif.id, e)}
-                        onTouchEnd={(e) => handleTouchEnd(notif.id, e)}
-                      >
-                        <div className="relative">
-                          <div className={`p-2 rounded-full mt-0.5 flex-shrink-0 ${colorClass}`}>
-                            <IconComponent className="size-4" />
-                          </div>
-                          <span className={`absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-card ${priorityDot}`} title={`${notif.priority} priority`} />
-                        </div>
-                        <div className="flex-1 min-w-0 pr-2">
-                          <p className={`text-sm leading-tight ${!notif.read ? 'font-semibold' : 'font-medium text-muted-foreground'}`}>
-                            {notif.title}
-                          </p>
-                          <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">{notif.message}</p>
-                          <div className="flex items-center gap-2 mt-1.5">
-                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{timeAgo(notif.timestamp)}</p>
-                            {notif.actionUrl && (
-                              <span className="text-[10px] text-primary">Tap to view →</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex flex-col gap-0.5 flex-shrink-0">
-                          {!notif.read && (
-                            <Button
-                              variant="ghost" size="icon" className="size-7"
-                              onClick={(e) => { e.stopPropagation(); markAsRead(notif.id); reload(); }}
-                              title="Mark read"
-                            >
-                              <Check className="size-3.5 text-green-500" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost" size="icon" className="size-7 relative"
-                            onClick={(e) => { e.stopPropagation(); setSnoozeMenu(snoozeMenu === notif.id ? null : notif.id); }}
-                            title="Snooze"
-                          >
-                            <Moon className="size-3.5 text-muted-foreground" />
-                            {snoozeMenu === notif.id && (
-                              <div className="absolute right-8 top-0 bg-popover border rounded-lg shadow-lg p-1 z-10 w-28" onClick={e => e.stopPropagation()}>
-                                <p className="text-[10px] text-muted-foreground px-2 py-1 font-medium">Snooze for:</p>
-                                {[{ label: '1 hour', hrs: 1 }, { label: '4 hours', hrs: 4 }, { label: '1 day', hrs: 24 }].map(opt => (
-                                  <button
-                                    key={opt.hrs}
-                                    className="w-full text-left px-2 py-1 text-xs hover:bg-muted rounded"
-                                    onClick={() => { snoozeNotification(notif.id, opt.hrs); setSnoozeMenu(null); reload(); }}
-                                  >
-                                    {opt.label}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            onClick={(e) => { e.stopPropagation(); dismissNotification(notif.id); reload(); }}
-                            title="Dismiss"
-                          >
-                            <X className="size-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Footer */}
-          {filteredNotifications.length > 0 && (
-            <div className="p-2 border-t bg-muted/20 text-center">
-              <p className="text-[10px] text-muted-foreground">
-                Showing {filteredNotifications.length} of {notifications.length} • Swipe left on mobile to dismiss
-              </p>
             </div>
           )}
         </div>
-        , document.body)}
-    </div>
+
+        {/* Settings Panel */}
+        {showSettings ? (
+          <ScrollArea className="h-[350px] sm:h-[450px]">
+            <div className="p-5 space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-semibold">General Preferences</h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">Manage how you receive alerts.</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7 px-3"
+                    onClick={async () => { await requestNotificationPermission(); reload(); }}
+                  >
+                    OS Permission
+                  </Button>
+                </div>
+                
+                <div className="grid gap-3 bg-muted/30 p-4 border rounded-xl">
+                  {/* Sound */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-3">
+                      <div className={`p-2 rounded-full flex-shrink-0 size-8 flex items-center justify-center ${prefs.soundEnabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                        {prefs.soundEnabled ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+                      </div>
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-medium">Sound Alerts</Label>
+                        <p className="text-[11px] text-muted-foreground leading-tight">Play a short chime on new notifications.</p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={prefs.soundEnabled}
+                      onCheckedChange={(checked) => updatePrefs({ soundEnabled: checked })}
+                    />
+                  </div>
+
+                  <div className="w-full h-px bg-border my-1" />
+
+                  {/* Desktop */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-3">
+                      <div className={`p-2 rounded-full flex-shrink-0 size-8 flex items-center justify-center ${prefs.desktopEnabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                        {prefs.desktopEnabled ? <Bell className="size-4" /> : <BellOff className="size-4" />}
+                      </div>
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-medium">Desktop Notifications</Label>
+                        <p className="text-[11px] text-muted-foreground leading-tight">Show native browser OS notifications.</p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={prefs.desktopEnabled}
+                      onCheckedChange={(checked) => updatePrefs({ desktopEnabled: checked })}
+                    />
+                  </div>
+
+                  <div className="w-full h-px bg-border my-1" />
+
+                  {/* DND */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-3">
+                      <div className={`p-2 rounded-full flex-shrink-0 size-8 flex items-center justify-center ${prefs.dndEnabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                        <Moon className="size-4" />
+                      </div>
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-medium">Do Not Disturb</Label>
+                        <p className="text-[11px] text-muted-foreground leading-tight">Silence alerts during quiet hours.</p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={prefs.dndEnabled}
+                      onCheckedChange={(checked) => updatePrefs({ dndEnabled: checked })}
+                    />
+                  </div>
+                </div>
+
+                {/* DND Time Pickers */}
+                {prefs.dndEnabled && (
+                  <div className="grid grid-cols-2 gap-3 p-4 bg-muted/20 border border-primary/20 rounded-xl relative overflow-hidden animate-in slide-in-from-top-2">
+                    <div className="absolute inset-0 bg-primary/5 pointer-events-none" />
+                    <div className="space-y-1.5 relative z-10">
+                      <label className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Start Time</label>
+                      <Input
+                        type="time"
+                        value={prefs.dndStart}
+                        onChange={(e) => updatePrefs({ dndStart: e.target.value })}
+                        className="h-8 text-sm focus-visible:ring-1"
+                      />
+                    </div>
+                    <div className="space-y-1.5 relative z-10">
+                      <label className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">End Time</label>
+                      <Input
+                        type="time"
+                        value={prefs.dndEnd}
+                        onChange={(e) => updatePrefs({ dndEnd: e.target.value })}
+                        className="h-8 text-sm focus-visible:ring-1"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Advanced Types */}
+              <div className="space-y-3">
+                <div>
+                  <h4 className="text-sm font-semibold">Notification Types</h4>
+                  <p className="text-xs text-muted-foreground mt-0.5">Select which types of events trigger an alert.</p>
+                </div>
+                
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(TYPE_LABELS) as NotificationType[]).map(type => {
+                    const isEnabled = prefs.enabledTypes.includes(type);
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => toggleType(type)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 ${
+                          isEnabled
+                            ? 'bg-primary/10 border-primary/30 text-primary shadow-sm hover:bg-primary/20'
+                            : 'bg-muted/40 border-border text-muted-foreground hover:bg-muted'
+                        }`}
+                      >
+                        {isEnabled ? <CheckCircle2 className="size-3.5" /> : <div className="size-3.5 rounded-full border border-current opacity-50" />}
+                        {TYPE_LABELS[type]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </ScrollArea>
+        ) : (
+          /* Notifications List */
+          <ScrollArea className="h-[350px] sm:h-[450px]">
+            <div className="p-2">
+              {filteredNotifications.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-[300px] text-center px-4 animate-in fade-in zoom-in-95">
+                  <div className="size-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                    <Bell className="size-8 text-muted-foreground/40" />
+                  </div>
+                  <h4 className="text-base font-semibold">All caught up!</h4>
+                  <p className="text-xs text-muted-foreground mt-1.5 max-w-[200px] leading-relaxed">
+                    {filter === 'all' ? "You don't have any new notifications to show." : `No matched notifications for the "${filter.replace('_', ' ')}" filter.`}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4 pb-2">
+                  {GROUP_ORDER.filter(g => grouped[g]?.length).map(group => (
+                    <div key={group} className="space-y-1">
+                      <div className="px-3 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider sticky top-0 bg-popover/90 backdrop-blur-sm z-10">
+                        {group}
+                      </div>
+                      
+                      <div className="space-y-1 px-1">
+                        {grouped[group].map((notif) => {
+                          const IconComponent = ICON_MAP[notif.type] || Info;
+                          const colorClass = COLOR_MAP[notif.type] || COLOR_MAP.info;
+                          const priorityDot = PRIORITY_MAP[notif.priority] || PRIORITY_MAP.medium;
+
+                          return (
+                            <div
+                              key={notif.id}
+                              className={`group relative flex items-start gap-3 p-3 rounded-lg transition-all duration-200 select-none ${
+                                !notif.read ? 'bg-primary/5 border border-primary/20 shadow-sm' : 'hover:bg-muted/50 border border-transparent'
+                              } ${notif.actionUrl ? 'cursor-pointer hover:shadow-md' : 'cursor-default'}`}
+                              onClick={() => handleNotifClick(notif)}
+                            >
+                              <div className="relative mt-0.5 shadow-sm rounded-full bg-background">
+                                <div className={`p-2.5 rounded-full flex-shrink-0 ${colorClass}`}>
+                                  <IconComponent className="size-4" />
+                                </div>
+                                <span className={`absolute -top-1 -right-1 size-3 rounded-full border-2 border-background ${priorityDot}`} title={`${notif.priority} priority`} />
+                              </div>
+                              
+                              <div className="flex-1 min-w-0 pr-8">
+                                <p className={`text-[13px] leading-tight ${!notif.read ? 'font-bold' : 'font-medium text-foreground/80'}`}>
+                                  {notif.title}
+                                </p>
+                                <p className="text-muted-foreground/90 mt-1 line-clamp-2 text-xs leading-snug">
+                                  {notif.message}
+                                </p>
+                                <div className="flex items-center gap-3 mt-2">
+                                  <p className="text-[10px] font-medium text-muted-foreground">
+                                    {timeAgo(notif.timestamp)}
+                                  </p>
+                                  {notif.actionUrl && (
+                                    <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer">
+                                      View details
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Actions Dropdown */}
+                              <div className="absolute right-2 top-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+                                    <Button variant="ghost" size="icon" className="size-8 rounded-full bg-background shadow-xs hover:bg-muted">
+                                      <MoreVertical className="size-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-40 z-[150]" onClick={e => e.stopPropagation()}>
+                                    {!notif.read && (
+                                      <DropdownMenuItem onClick={() => { markAsRead(notif.id); reload(); }}>
+                                        <Check className="size-3.5 mr-2 text-primary" /> Mark as Read
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem onClick={() => { snoozeNotification(notif.id, 1); reload(); }}>
+                                      <Moon className="size-3.5 mr-2" /> Snooze 1 hour
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => { snoozeNotification(notif.id, 24); reload(); }}>
+                                      <Clock className="size-3.5 mr-2" /> Snooze 1 day
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive" onClick={() => { dismissNotification(notif.id); reload(); }}>
+                                      <Trash2 className="size-3.5 mr-2" /> Dismiss
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        )}
+
+        {/* Footer actions */}
+        {!showSettings && notifications.length > 0 && (
+          <div className="p-3 border-t bg-muted/10 flex items-center justify-between z-10 relative">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-xs h-8 text-muted-foreground hover:text-foreground"
+              onClick={() => { markAllAsRead(); reload(); }}
+              disabled={unreadCount === 0}
+            >
+              <CheckCheck className="size-3.5 mr-1.5" /> 
+              {unreadCount === 0 ? 'All Read' : 'Mark all read'}
+            </Button>
+            
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-xs h-8 text-destructive hover:bg-destructive/10"
+              onClick={() => { clearAllNotifications(); reload(); }}
+            >
+              <Trash2 className="size-3.5 mr-1.5" /> Clear All
+            </Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
