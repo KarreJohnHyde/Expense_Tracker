@@ -1,0 +1,8 @@
+[33m[vite:css][postcss] @import must precede all other statements (besides @charset or empty @layer)
+5479|    initial-value: 0;
+5480|  }
+5481|  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+5482|  :root {
+5483|    --font-size: 16px;[39m
+^C
