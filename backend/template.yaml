@@ -36,12 +36,14 @@ Resources:
       Handler: app.handler
       Environment:
         Variables:
-          TABLE_NAME: !Ref ExpenseTrackerTable
+          TABLE_NAME:
+            Ref: ExpenseTrackerTable
       Events:
         ProxyApi:
           Type: Api
           Properties:
-            RestApiId: !Ref ExpenseTrackerApi
+            RestApiId:
+              Ref: ExpenseTrackerApi
             Path: /{proxy+}
             Method: ANY
 
@@ -57,7 +59,9 @@ Resources:
 Outputs:
   ApiUrl:
     Description: "API Gateway endpoint URL"
-    Value: !Sub "https://${ExpenseTrackerApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+    Value:
+      Fn::Sub: "https://${ExpenseTrackerApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
   TableName:
     Description: "DynamoDB Table Name"
-    Value: !Ref ExpenseTrackerTable
+    Value:
+      Ref: ExpenseTrackerTable

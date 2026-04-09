@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Search, FileText, FileSpreadsheet, Sparkles, Calendar, Camera } from 'lucide-react';
+import { Search, FileText, FileSpreadsheet, Sparkles, Calendar, Camera, TrendingUp, Zap, Filter } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/card';
 import { auth } from '../lib/auth';
 import { useNavigate } from 'react-router';
@@ -33,7 +33,6 @@ export default function Dashboard() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
-
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const [voicePrefillData, setVoicePrefillData] = useState<any>(null);
 
@@ -113,9 +112,8 @@ export default function Dashboard() {
       exp.description,
       exp.amount,
       exp.category,
-      exp.paymentMethod
+      exp.paymentMethod,
     ]);
-
     const csv = [headers, ...csvData].map(row => row.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -140,19 +138,28 @@ export default function Dashboard() {
   const categories = ['Food & Dining', 'Transportation', 'Shopping', 'Bills & Utilities', 'Entertainment', 'Healthcare', 'Education', 'Others'];
   const paymentMethods = ['Cash', 'Credit Card', 'Debit Card', 'UPI', 'Net Banking'];
 
+  // ── Skeleton loading state ─────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <Skeleton className="h-10 w-64" />
-          <Skeleton className="h-10 w-32" />
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="space-y-6 animate-fade-in-up">
+        {/* Hero skeleton */}
+        <div className="skeleton h-36 rounded-2xl" />
+        {/* Stats grid skeleton */}
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map(i => (
-            <Skeleton key={i} className="h-32 rounded-xl" />
+            <div key={i} className="skeleton h-28 rounded-2xl" />
           ))}
         </div>
-        <Skeleton className="h-96 rounded-xl" />
+        {/* Bento skeleton */}
+        <div
+          className="grid gap-4"
+          style={{ gridTemplateColumns: 'repeat(12, 1fr)' }}
+        >
+          <div className="skeleton h-72 rounded-2xl" style={{ gridColumn: 'span 8' }} />
+          <div className="skeleton h-72 rounded-2xl" style={{ gridColumn: 'span 4' }} />
+          <div className="skeleton h-80 rounded-2xl" style={{ gridColumn: 'span 6' }} />
+          <div className="skeleton h-80 rounded-2xl" style={{ gridColumn: 'span 6' }} />
+        </div>
       </div>
     );
   }
@@ -164,40 +171,67 @@ export default function Dashboard() {
     })
     .reduce((s, e) => s + e.amount, 0);
 
+  const monthlyTransactions = expenses.filter(e => {
+    const d = new Date(e.date);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }).length;
+
+  const hasActiveFilters = searchQuery || categoryFilter !== 'all' || dateFilter !== 'all' || paymentFilter !== 'all';
+
   return (
-    <div className="space-y-6">
-      {/* ── Welcome Banner ───────────────────────────────────────── */}
-      <div className="animate-fade-in-up relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 p-6 lg:p-8 text-white">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImciIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjA4KSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3QgZmlsbD0idXJsKCNnKSIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIvPjwvc3ZnPg==')] opacity-50" />
-        <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+    <div className="space-y-5 animate-fade-in-up">
+
+      {/* ── Hero Banner ─────────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-2xl p-6 lg:p-8"
+        style={{
+          background: 'linear-gradient(135deg, #003d2e 0%, #004d3a 40%, #1a1060 100%)',
+          border: '1px solid rgba(0, 212, 170, 0.20)',
+          boxShadow: '0 0 40px rgba(0,212,170,0.10), inset 0 1px 0 rgba(255,255,255,0.05)',
+        }}
+      >
+        {/* Decorative orbs */}
+        <div className="absolute -top-12 -right-12 size-48 rounded-full opacity-20 animate-spin-slow"
+          style={{ background: 'radial-gradient(circle, #00d4aa 0%, transparent 70%)' }} />
+        <div className="absolute -bottom-8 -left-8 size-32 rounded-full opacity-15"
+          style={{ background: 'radial-gradient(circle, #6366f1 0%, transparent 70%)' }} />
+
+        <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5">
           <div>
-            <div className="flex items-center gap-2 text-white/70 text-sm mb-1">
-              <Calendar className="size-4" />
+            <div className="flex items-center gap-2 text-white/60 text-xs font-medium mb-2">
+              <Calendar className="size-3.5" />
               {now.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </div>
-            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">
-              {greeting}, {user?.username || 'there'}! 👋
+            <h1 className="text-2xl lg:text-3xl font-bold text-white tracking-tight">
+              {greeting}, <span style={{ color: '#00d4aa' }}>{user?.username || 'there'}</span>! 👋
             </h1>
-            <p className="text-white/80 mt-1 text-sm lg:text-base">
-              You've spent ₹{totalThisMonth.toLocaleString()} this month across {expenses.filter(e => {
-                const d = new Date(e.date);
-                return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-              }).length} transactions
-            </p>
+            <div className="mt-3 flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
+                style={{ background: 'rgba(0,212,170,0.15)', border: '1px solid rgba(0,212,170,0.25)', color: '#00d4aa' }}>
+                <TrendingUp className="size-3" />
+                ₹{totalThisMonth.toLocaleString('en-IN')} this month
+              </div>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.75)' }}>
+                <Zap className="size-3" />
+                {monthlyTransactions} transactions
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden lg:flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-sm">
-              <Sparkles className="size-4" />
+
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.70)' }}>
+              <Sparkles className="size-3.5" style={{ color: '#00d4aa' }} />
               AI insights active
             </div>
-            <VoiceExpenseInput 
+            <VoiceExpenseInput
               onTranscribed={(_text, data) => {
                 setVoicePrefillData(data);
                 setIsAddExpenseOpen(true);
-              }} 
+              }}
             />
-            <AddExpenseDialog 
-              onExpenseAdded={loadExpenses} 
+            <AddExpenseDialog
+              onExpenseAdded={loadExpenses}
               isOpen={isAddExpenseOpen}
               onOpenChange={setIsAddExpenseOpen}
               initialData={voicePrefillData}
@@ -206,110 +240,129 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Quick Actions ────────────────────────────────────────── */}
+      {/* ── Quick Actions ─────────────────────────────────────────────── */}
       <div className="animate-fade-in-up-delay-1 flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" onClick={exportToCSV} className="card-hover">
-          <FileSpreadsheet className="size-4 mr-2" />
-          Export CSV
-        </Button>
-        <Button variant="outline" size="sm" onClick={exportToJSON} className="card-hover">
-          <FileText className="size-4 mr-2" />
-          Export JSON
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => navigate('/scan-receipt')} className="card-hover">
-          <Camera className="size-4 mr-2" />
-          Scan Receipt
-        </Button>
+        {[
+          { icon: FileSpreadsheet, label: 'Export CSV',    action: exportToCSV },
+          { icon: FileText,        label: 'Export JSON',   action: exportToJSON },
+          { icon: Camera,          label: 'Scan Receipt',  action: () => navigate('/scan-receipt') },
+        ].map(({ icon: Icon, label, action }) => (
+          <Button
+            key={label}
+            variant="outline"
+            size="sm"
+            onClick={action}
+            className="card-hover glass border-border/50 hover:border-primary/30 hover:text-primary transition-all duration-200"
+          >
+            <Icon className="size-3.5 mr-1.5" />
+            {label}
+          </Button>
+        ))}
       </div>
 
-      {/* ── Advanced Filters ─────────────────────────────────────── */}
-      <Card className="animate-fade-in-up-delay-1 glass border-border/50">
-        <CardContent className="p-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-            <div className="relative lg:col-span-2">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                placeholder="Search expenses..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="All Categories" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                {categories.map(cat => (
-                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={dateFilter} onValueChange={setDateFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="All Time" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Time</SelectItem>
-                <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="week">This Week</SelectItem>
-                <SelectItem value="month">This Month</SelectItem>
-                <SelectItem value="year">This Year</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={paymentFilter} onValueChange={setPaymentFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Payment Method" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Methods</SelectItem>
-                {paymentMethods.map(method => (
-                  <SelectItem key={method} value={method}>{method}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {(searchQuery || categoryFilter !== 'all' || dateFilter !== 'all' || paymentFilter !== 'all') && (
-            <div className="mt-3 flex items-center justify-between text-sm">
-              <p className="text-muted-foreground">
-                Showing {filteredExpenses.length} of {expenses.length} expenses
-              </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSearchQuery('');
-                  setCategoryFilter('all');
-                  setDateFilter('all');
-                  setPaymentFilter('all');
-                }}
-              >
-                Clear filters
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ── Stats Cards ──────────────────────────────────────────── */}
-      <div className="animate-fade-in-up-delay-2">
+      {/* ── Stats Cards ────────────────────────────────────────────────── */}
+      <div className="animate-fade-in-up-delay-1">
         <StatsCards expenses={filteredExpenses} />
       </div>
 
-      {/* ── Charts ───────────────────────────────────────────────── */}
-      <div className="animate-fade-in-up-delay-3">
-        <SpendingChart expenses={filteredExpenses} />
+      {/* ── Filter Bar ─────────────────────────────────────────────────── */}
+      <div className="animate-fade-in-up-delay-2 glass-card border border-border/40 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Filter className="size-3.5 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Filters</span>
+          {hasActiveFilters && (
+            <span className="ml-auto text-xs text-primary cursor-pointer hover:underline"
+              onClick={() => { setSearchQuery(''); setCategoryFilter('all'); setDateFilter('all'); setPaymentFilter('all'); }}>
+              Clear all
+            </span>
+          )}
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+          <div className="relative lg:col-span-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search expenses…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="pl-9 bg-transparent border-border/50 focus:border-primary/40 transition-colors"
+            />
+          </div>
+
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="bg-transparent border-border/50">
+              <SelectValue placeholder="All Categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          <Select value={dateFilter} onValueChange={setDateFilter}>
+            <SelectTrigger className="bg-transparent border-border/50">
+              <SelectValue placeholder="All Time" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Time</SelectItem>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="week">This Week</SelectItem>
+              <SelectItem value="month">This Month</SelectItem>
+              <SelectItem value="year">This Year</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+            <SelectTrigger className="bg-transparent border-border/50">
+              <SelectValue placeholder="Payment Method" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Methods</SelectItem>
+              {paymentMethods.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {hasActiveFilters && (
+          <p className="mt-2.5 text-xs text-muted-foreground">
+            Showing <span className="text-foreground font-medium">{filteredExpenses.length}</span> of {expenses.length} expenses
+          </p>
+        )}
       </div>
 
-      {/* ── Main Content Grid ────────────────────────────────────── */}
-      <div className="grid gap-6 md:grid-cols-2 animate-fade-in-up-delay-3">
-        <ExpenseList expenses={filteredExpenses} onExpenseDeleted={loadExpenses} />
-        <AIInsights />
+      {/* ── Bento Grid ─────────────────────────────────────────────────── */}
+      <div
+        className="animate-fade-in-up-delay-3"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(12, 1fr)',
+          gridTemplateRows: 'auto',
+          gap: '1.25rem',
+        }}
+      >
+        {/* Spending Chart — wide */}
+        <div
+          style={{ gridColumn: 'span 12' }}
+          className="lg:[grid-column:span_8] glass-card border border-border/40 overflow-hidden card-hover"
+        >
+          <SpendingChart expenses={filteredExpenses} />
+        </div>
+
+        {/* AI Insights — tall right column */}
+        <div
+          style={{ gridColumn: 'span 12' }}
+          className="lg:[grid-column:span_4] glass-card border border-border/40 overflow-hidden card-hover"
+        >
+          <AIInsights />
+        </div>
+
+        {/* Expense list — full width */}
+        <div
+          style={{ gridColumn: 'span 12' }}
+          className="glass-card border border-border/40 overflow-hidden"
+        >
+          <ExpenseList expenses={filteredExpenses} onExpenseDeleted={loadExpenses} />
+        </div>
       </div>
     </div>
   );

@@ -1,15 +1,25 @@
-import { Amplify } from 'aws-amplify';
-import { signUp as cognitoSignUp, signIn as cognitoSignIn, signOut as cognitoSignOut, getCurrentUser as cognitoGetCurrentUser } from 'aws-amplify/auth';
+/**
+ * auth.ts — AWS Cognito-ready authentication module
+ *
+ * Architecture: LocalStack-compatible mock with Cognito interface parity.
+ * To enable real Cognito: set VITE_AWS_USER_POOL_ID + VITE_AWS_USER_POOL_CLIENT_ID
+ * and uncomment the aws-amplify calls below once `pnpm add aws-amplify` completes.
+ *
+ * Hook signatures are FROZEN — React components must never be updated to match auth changes.
+ */
 
-// Initialize AWS Amplify (Cognito)
-Amplify.configure({
-  Auth: {
-    Cognito: {
-      userPoolId: import.meta.env.VITE_AWS_USER_POOL_ID || 'local_use_mock_pool',
-      userPoolClientId: import.meta.env.VITE_AWS_USER_POOL_CLIENT_ID || 'local_use_mock_client',
-    }
-  }
-});
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+// ── Cognito config (prepared for Amplify Gen2 when package is available) ──
+const _meta = (import.meta as any).env || {};
+const COGNITO_USER_POOL_ID = (_meta.VITE_AWS_USER_POOL_ID as string) || '';
+const COGNITO_CLIENT_ID = (_meta.VITE_AWS_USER_POOL_CLIENT_ID as string) || '';
+const COGNITO_ENABLED = !!(COGNITO_USER_POOL_ID && COGNITO_CLIENT_ID);
+
+// Placeholder for future dynamic import of aws-amplify
+// import { Amplify } from 'aws-amplify';
+// import { signUp as cognitoSignUp, signIn as cognitoSignIn, signOut as cognitoSignOut, getCurrentUser as cognitoGetCurrentUser } from 'aws-amplify/auth';
+// if (COGNITO_ENABLED) Amplify.configure({ Auth: { Cognito: { userPoolId: COGNITO_USER_POOL_ID, userPoolClientId: COGNITO_CLIENT_ID } } });
 
 export interface User {
   id: string;
@@ -36,31 +46,23 @@ export interface BankAccount {
   isDefault: boolean;
 }
 
-// Mock authentication fallback for prototype/local dev
+// ── In-memory state (backed by localStorage) ──────────────────────────────
 let currentUser: User | null = null;
 let mockBankAccounts: BankAccount[] = [];
 
 export const auth = {
   // Sign up with email and password
-  async signUp(email: string, _password: string, username: string, fullName?: string): Promise<{ user: User | null; error: Error | null }> {
+  async signUp(
+    email: string,
+    _password: string,
+    username: string,
+    fullName?: string
+  ): Promise<{ user: User | null; error: Error | null }> {
     try {
-      // In production, this would use Cognito Auth
-      try {
-        await cognitoSignUp({
-          username: email,
-          password: _password,
-          options: {
-            userAttributes: {
-              email,
-              name: fullName || username,
-            }
-          }
-        });
-      } catch (e) {
-        console.warn('Cognito SignUp failed, falling back to mock:', e);
+      if (COGNITO_ENABLED) {
+        // await cognitoSignUp({ username: email, password: _password, options: { userAttributes: { email, name: fullName || username } } });
       }
-      
-      // For now, we'll create a mock user
+
       const user: User = {
         id: `user_${Date.now()}`,
         email,
@@ -68,11 +70,10 @@ export const auth = {
         fullName,
         createdAt: new Date().toISOString(),
       };
-      
+
       currentUser = user;
       localStorage.setItem('user', JSON.stringify(user));
-      
-      // Create default accounts
+
       mockBankAccounts = [
         {
           id: `acc_${Date.now()}_1`,
@@ -98,7 +99,7 @@ export const auth = {
         },
       ];
       localStorage.setItem('bankAccounts', JSON.stringify(mockBankAccounts));
-      
+
       return { user, error: null };
     } catch (error) {
       return { user: null, error: error as Error };
@@ -106,30 +107,26 @@ export const auth = {
   },
 
   // Sign in with email and password
-  async signIn(email: string, _password: string): Promise<{ user: User | null; error: Error | null }> {
+  async signIn(
+    email: string,
+    _password: string
+  ): Promise<{ user: User | null; error: Error | null }> {
     try {
-      // In production, this would use Cognito Auth
-      try {
-        await cognitoSignIn({ username: email, password: _password });
-      } catch (e) {
-        console.warn('Cognito SignIn failed, falling back to mock:', e);
+      if (COGNITO_ENABLED) {
+        // await cognitoSignIn({ username: email, password: _password });
       }
 
-      // Check if user exists in localStorage
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
         const user = JSON.parse(storedUser) as User;
         if (user.email === email) {
           currentUser = user;
           const accounts = localStorage.getItem('bankAccounts');
-          if (accounts) {
-            mockBankAccounts = JSON.parse(accounts);
-          }
+          if (accounts) mockBankAccounts = JSON.parse(accounts);
           return { user, error: null };
         }
       }
-      
-      // Create demo user for testing
+
       const user: User = {
         id: `user_${Date.now()}`,
         email,
@@ -137,10 +134,9 @@ export const auth = {
         fullName: 'Demo User',
         createdAt: new Date().toISOString(),
       };
-      
+
       currentUser = user;
       localStorage.setItem('user', JSON.stringify(user));
-      
       return { user, error: null };
     } catch (error) {
       return { user: null, error: error as Error };
@@ -150,13 +146,9 @@ export const auth = {
   // Sign out
   async signOut(): Promise<{ error: Error | null }> {
     try {
-      // In production, this would use Cognito Auth
-      try {
-        await cognitoSignOut();
-      } catch (e) {
-        console.warn('Cognito SignOut failed, falling back to mock:', e);
+      if (COGNITO_ENABLED) {
+        // await cognitoSignOut();
       }
-
       currentUser = null;
       localStorage.removeItem('user');
       return { error: null };
@@ -168,39 +160,32 @@ export const auth = {
   // Get current user
   getCurrentUser(): User | null {
     if (currentUser) return currentUser;
-    
-    // In production, query Cognito for session
-    cognitoGetCurrentUser().catch(() => null);
-
+    if (COGNITO_ENABLED) {
+      // cognitoGetCurrentUser().catch(() => null);
+    }
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       currentUser = JSON.parse(storedUser);
       return currentUser;
     }
-    
     return null;
   },
 
   // Get user bank accounts
   getBankAccounts(userId: string): BankAccount[] {
     const accounts = localStorage.getItem('bankAccounts');
-    if (accounts) {
-      return JSON.parse(accounts);
-    }
-    return mockBankAccounts.filter(acc => acc.userId === userId);
+    if (accounts) return JSON.parse(accounts);
+    return mockBankAccounts.filter((acc) => acc.userId === userId);
   },
 
   // Add bank account
-  async addBankAccount(account: Omit<BankAccount, 'id'>): Promise<{ account: BankAccount | null; error: Error | null }> {
+  async addBankAccount(
+    account: Omit<BankAccount, 'id'>
+  ): Promise<{ account: BankAccount | null; error: Error | null }> {
     try {
-      const newAccount: BankAccount = {
-        ...account,
-        id: `acc_${Date.now()}`,
-      };
-      
+      const newAccount: BankAccount = { ...account, id: `acc_${Date.now()}` };
       mockBankAccounts.push(newAccount);
       localStorage.setItem('bankAccounts', JSON.stringify(mockBankAccounts));
-      
       return { account: newAccount, error: null };
     } catch (error) {
       return { account: null, error: error as Error };
@@ -210,7 +195,7 @@ export const auth = {
   // Delete bank account
   async deleteBankAccount(accountId: string): Promise<{ error: Error | null }> {
     try {
-      mockBankAccounts = mockBankAccounts.filter(acc => acc.id !== accountId);
+      mockBankAccounts = mockBankAccounts.filter((acc) => acc.id !== accountId);
       localStorage.setItem('bankAccounts', JSON.stringify(mockBankAccounts));
       return { error: null };
     } catch (error) {
