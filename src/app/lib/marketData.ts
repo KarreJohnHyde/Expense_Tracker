@@ -4,8 +4,8 @@ export type MarketProvider = 'twelvedata';
 
 const env = (import.meta as any).env || {};
 const API_MODE = (env.VITE_API_MODE as string) || '';
-const LOCAL_API_URL = 'http://localhost:3001';
-const MARKET_API_BASE = ((env.VITE_MARKET_API_BASE as string) || (API_MODE === 'local' ? LOCAL_API_URL : '')).trim();
+const SUPABASE_FUNCTIONS_URL = 'https://yghrnwlwfdadlnzhqhdp.supabase.co/functions/v1';
+const MARKET_API_BASE = ((env.VITE_MARKET_API_BASE as string) || (API_MODE === 'local' ? SUPABASE_FUNCTIONS_URL : '')).trim();
 const TWELVE_KEY = ((env.VITE_TWELVEDATA_API_KEY as string) || '').trim();
 
 const DIRECT_BASE = 'https://api.twelvedata.com';

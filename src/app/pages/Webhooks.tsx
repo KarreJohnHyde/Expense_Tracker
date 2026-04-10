@@ -11,6 +11,10 @@ import {
 } from 'lucide-react';
 import { auth } from '../lib/auth';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const _meta = (import.meta as any).env || {};
+const WEBHOOK_BASE_URL = (_meta.VITE_WEBHOOK_BASE_URL as string) || 'https://yghrnwlwfdadlnzhqhdp.supabase.co/functions/v1';
+
 interface WebhookLog {
   id: string;
   sender: string;
@@ -26,7 +30,7 @@ export default function Webhooks() {
   const [apiKey, setApiKey] = useState(
     user?.id ? `exp_${btoa(user.id).replace(/=/g, '')}_${Date.now().toString(36)}` : 'exp_demo_key_xyz123'
   );
-  const [baseUrl, setBaseUrl] = useState('http://localhost:3001');
+  const [baseUrl, setBaseUrl] = useState(WEBHOOK_BASE_URL);
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -38,7 +42,7 @@ export default function Webhooks() {
 
   const checkServerStatus = useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/webhook-info', { cache: 'no-store' });
+      const res = await fetch(`${WEBHOOK_BASE_URL}/api/webhook-info`, { cache: 'no-store' });
       const data = await res.json();
       if (data && data.url) setBaseUrl(data.url);
       setServerStatus('online');
@@ -56,7 +60,7 @@ export default function Webhooks() {
   const fetchLogs = async () => {
     setLogsLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/webhook-logs', { cache: 'no-store' });
+      const res = await fetch(`${WEBHOOK_BASE_URL}/api/webhook-logs`, { cache: 'no-store' });
       const data = await res.json();
       setLogs(data.logs || []);
     } catch {

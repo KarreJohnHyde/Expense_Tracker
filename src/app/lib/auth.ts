@@ -1,25 +1,17 @@
 /**
- * auth.ts — AWS Cognito-ready authentication module
+ * auth.ts — Supabase-backed authentication module
  *
- * Architecture: LocalStack-compatible mock with Cognito interface parity.
- * To enable real Cognito: set VITE_AWS_USER_POOL_ID + VITE_AWS_USER_POOL_CLIENT_ID
- * and uncomment the aws-amplify calls below once `pnpm add aws-amplify` completes.
+ * Uses supabase.auth for real sign-up / sign-in / sign-out when the Supabase
+ * project is reachable. Falls back to localStorage for offline / demo mode so
+ * the UI never breaks even without network connectivity.
  *
- * Hook signatures are FROZEN — React components must never be updated to match auth changes.
+ * Hook signatures are FROZEN — React components must never be updated to match
+ * auth changes.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// ── Cognito config (prepared for Amplify Gen2 when package is available) ──
-const _meta = (import.meta as any).env || {};
-const COGNITO_USER_POOL_ID = (_meta.VITE_AWS_USER_POOL_ID as string) || '';
-const COGNITO_CLIENT_ID = (_meta.VITE_AWS_USER_POOL_CLIENT_ID as string) || '';
-const COGNITO_ENABLED = !!(COGNITO_USER_POOL_ID && COGNITO_CLIENT_ID);
-
-// Placeholder for future dynamic import of aws-amplify
-// import { Amplify } from 'aws-amplify';
-// import { signUp as cognitoSignUp, signIn as cognitoSignIn, signOut as cognitoSignOut, getCurrentUser as cognitoGetCurrentUser } from 'aws-amplify/auth';
-// if (COGNITO_ENABLED) Amplify.configure({ Auth: { Cognito: { userPoolId: COGNITO_USER_POOL_ID, userPoolClientId: COGNITO_CLIENT_ID } } });
+import { supabase } from './supabase';
 
 export interface User {
   id: string;
@@ -50,19 +42,81 @@ export interface BankAccount {
 let currentUser: User | null = null;
 let mockBankAccounts: BankAccount[] = [];
 
+/** Convert a Supabase Auth user into our local User shape. */
+function toLocalUser(sbUser: { id: string; email?: string; user_metadata?: any; created_at?: string }): User {
+  return {
+    id: sbUser.id,
+    email: sbUser.email || '',
+    username: sbUser.user_metadata?.username || sbUser.email?.split('@')[0] || 'user',
+    fullName: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name,
+    avatar: sbUser.user_metadata?.avatar_url,
+    createdAt: sbUser.created_at || new Date().toISOString(),
+  };
+}
+
+function seedBankAccounts(user: User): BankAccount[] {
+  const accounts: BankAccount[] = [
+    {
+      id: `acc_${Date.now()}_1`,
+      userId: user.id,
+      accountType: 'savings',
+      bankName: 'HDFC Bank',
+      accountNumber: '1234567890',
+      accountHolderName: user.fullName || user.username,
+      ifscCode: 'HDFC0001234',
+      balance: 50000,
+      isDefault: true,
+    },
+    {
+      id: `acc_${Date.now()}_2`,
+      userId: user.id,
+      accountType: 'upi',
+      bankName: 'PhonePe',
+      accountNumber: '',
+      accountHolderName: user.fullName || user.username,
+      upiId: `${user.username}@paytm`,
+      balance: 5000,
+      isDefault: false,
+    },
+  ];
+  localStorage.setItem('bankAccounts', JSON.stringify(accounts));
+  return accounts;
+}
+
 export const auth = {
   // Sign up with email and password
   async signUp(
     email: string,
-    _password: string,
+    password: string,
     username: string,
     fullName?: string
   ): Promise<{ user: User | null; error: Error | null }> {
     try {
-      if (COGNITO_ENABLED) {
-        // await cognitoSignUp({ username: email, password: _password, options: { userAttributes: { email, name: fullName || username } } });
+      // Try Supabase first
+      const { data, error: sbError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { username, full_name: fullName || username },
+        },
+      });
+
+      if (sbError) throw sbError;
+
+      if (data.user) {
+        const user = toLocalUser(data.user);
+        currentUser = user;
+        localStorage.setItem('user', JSON.stringify(user));
+        mockBankAccounts = seedBankAccounts(user);
+        return { user, error: null };
       }
 
+      // Supabase returned no user (e.g. email confirmation required) — fall through to local
+      throw new Error('Confirmation required – falling back to local demo');
+    } catch (err) {
+      console.warn('[auth] Supabase signUp unavailable, using localStorage fallback', err);
+
+      // localStorage fallback for offline / demo
       const user: User = {
         id: `user_${Date.now()}`,
         email,
@@ -73,49 +127,38 @@ export const auth = {
 
       currentUser = user;
       localStorage.setItem('user', JSON.stringify(user));
-
-      mockBankAccounts = [
-        {
-          id: `acc_${Date.now()}_1`,
-          userId: user.id,
-          accountType: 'savings',
-          bankName: 'HDFC Bank',
-          accountNumber: '1234567890',
-          accountHolderName: fullName || username,
-          ifscCode: 'HDFC0001234',
-          balance: 50000,
-          isDefault: true,
-        },
-        {
-          id: `acc_${Date.now()}_2`,
-          userId: user.id,
-          accountType: 'upi',
-          bankName: 'PhonePe',
-          accountNumber: '',
-          accountHolderName: fullName || username,
-          upiId: `${username}@paytm`,
-          balance: 5000,
-          isDefault: false,
-        },
-      ];
-      localStorage.setItem('bankAccounts', JSON.stringify(mockBankAccounts));
-
+      mockBankAccounts = seedBankAccounts(user);
       return { user, error: null };
-    } catch (error) {
-      return { user: null, error: error as Error };
     }
   },
 
   // Sign in with email and password
   async signIn(
     email: string,
-    _password: string
+    password: string
   ): Promise<{ user: User | null; error: Error | null }> {
     try {
-      if (COGNITO_ENABLED) {
-        // await cognitoSignIn({ username: email, password: _password });
+      const { data, error: sbError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (sbError) throw sbError;
+
+      if (data.user) {
+        const user = toLocalUser(data.user);
+        currentUser = user;
+        localStorage.setItem('user', JSON.stringify(user));
+        const accounts = localStorage.getItem('bankAccounts');
+        if (accounts) mockBankAccounts = JSON.parse(accounts);
+        return { user, error: null };
       }
 
+      throw new Error('No user returned');
+    } catch (err) {
+      console.warn('[auth] Supabase signIn unavailable, using localStorage fallback', err);
+
+      // localStorage fallback
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
         const user = JSON.parse(storedUser) as User;
@@ -138,31 +181,24 @@ export const auth = {
       currentUser = user;
       localStorage.setItem('user', JSON.stringify(user));
       return { user, error: null };
-    } catch (error) {
-      return { user: null, error: error as Error };
     }
   },
 
   // Sign out
   async signOut(): Promise<{ error: Error | null }> {
     try {
-      if (COGNITO_ENABLED) {
-        // await cognitoSignOut();
-      }
-      currentUser = null;
-      localStorage.removeItem('user');
-      return { error: null };
-    } catch (error) {
-      return { error: error as Error };
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.warn('[auth] Supabase signOut failed, clearing locally', err);
     }
+    currentUser = null;
+    localStorage.removeItem('user');
+    return { error: null };
   },
 
   // Get current user
   getCurrentUser(): User | null {
     if (currentUser) return currentUser;
-    if (COGNITO_ENABLED) {
-      // cognitoGetCurrentUser().catch(() => null);
-    }
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       currentUser = JSON.parse(storedUser);

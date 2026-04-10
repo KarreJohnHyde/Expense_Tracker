@@ -1,9 +1,8 @@
-// Severed from Supabase for AWS Migration
+// Supabase Edge Function API
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const _meta = (import.meta as any).env || {};
 
-// Configure to hit AWS SAM Local API Gateway defaults to :3000
-const API_URL = (_meta.VITE_AWS_API_URL as string) || 'http://127.0.0.1:3000';
+const API_URL = (_meta.VITE_API_URL as string) || 'https://yghrnwlwfdadlnzhqhdp.supabase.co/functions/v1';
 
 
 export interface Expense {
