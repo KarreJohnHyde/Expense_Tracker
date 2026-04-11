@@ -250,9 +250,16 @@ export default function CryptoMarket() {
     api.addExpense({
       description: `Bought ${tradeQuantity} ${selectedCrypto.symbol}`,
       amount: value,
-      category: 'Investments',
+      category: 'Investments & Savings',
       date: new Date().toISOString().split('T')[0],
-      paymentMethod: 'UPI'
+      paymentMethod: 'UPI',
+      source: 'crypto_trade',
+      metadata: {
+        action: 'buy',
+        symbol: selectedCrypto.symbol,
+        quantity: tradeQuantity,
+        unitPrice: selectedCrypto.price,
+      },
     }).catch(console.error);
 
     toast.success(`Bought ${tradeQuantity} ${selectedCrypto.symbol} at ${formatCurrency(selectedCrypto.price)}`);
@@ -290,9 +297,17 @@ export default function CryptoMarket() {
     api.addExpense({
       description: `Sold ${tradeQuantity} ${selectedCrypto.symbol}`,
       amount: -value,
-      category: 'Investments',
+      category: 'Investments & Savings',
       date: new Date().toISOString().split('T')[0],
-      paymentMethod: 'Net Banking'
+      paymentMethod: 'Net Banking',
+      source: 'crypto_trade',
+      metadata: {
+        action: 'sell',
+        symbol: selectedCrypto.symbol,
+        quantity: tradeQuantity,
+        unitPrice: selectedCrypto.price,
+        pnl: profit,
+      },
     }).catch(console.error);
 
     toast.success(`Sold ${tradeQuantity} ${selectedCrypto.symbol} at ${formatCurrency(selectedCrypto.price)}. P&L: ${formatCurrency(profit)}`);

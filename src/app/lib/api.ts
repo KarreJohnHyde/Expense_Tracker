@@ -1,5 +1,7 @@
 // Supabase Edge Function API
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { normalizeExpenseCategory, type ExpenseSource } from './expenseSchema';
+
 const _meta = (import.meta as any).env || {};
 
 const API_URL = (_meta.VITE_API_URL as string) || 'https://yghrnwlwfdadlnzhqhdp.supabase.co/functions/v1';
@@ -15,6 +17,14 @@ export interface Expense {
   tags?: string[];
   location?: string;
   receiptImage?: string | null;
+  source?: ExpenseSource;
+  scanData?: {
+    type: 'ocr_receipt' | 'qr' | 'barcode';
+    rawText: string;
+    format?: string;
+    capturedAt: string;
+  } | null;
+  metadata?: Record<string, any>;
 }
 
 export interface Budget {
@@ -117,9 +127,38 @@ const STORAGE_KEYS = {
   BUDGETS: 'expenseai_budgets'
 };
 
+function safeParse<T>(value: string | null, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function makeId(prefix: string) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeExpense(expense: Expense): Expense {
+  return {
+    ...expense,
+    amount: Number.isFinite(expense.amount) ? expense.amount : parseFloat(String(expense.amount || 0)),
+    category: normalizeExpenseCategory(expense.category),
+    paymentMethod: expense.paymentMethod || 'Cash',
+    source: expense.source || 'manual',
+    receiptImage: expense.receiptImage || null,
+    scanData: expense.scanData || null,
+  };
+}
+
 function getLocalExpenses(): Expense[] {
-  const data = localStorage.getItem(STORAGE_KEYS.EXPENSES);
-  if (data) return JSON.parse(data);
+  const data = safeParse<Expense[] | null>(localStorage.getItem(STORAGE_KEYS.EXPENSES), null);
+  if (data) {
+    const normalized = data.map(normalizeExpense);
+    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(normalized));
+    return normalized;
+  }
   const demo = generateDemoExpenses();
   localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(demo));
   return demo;
@@ -132,8 +171,8 @@ function saveLocalExpenses(expenses: Expense[]) {
 }
 
 function getLocalBudgets(): Budget[] {
-  const data = localStorage.getItem(STORAGE_KEYS.BUDGETS);
-  if (data) return JSON.parse(data);
+  const data = safeParse<Budget[] | null>(localStorage.getItem(STORAGE_KEYS.BUDGETS), null);
+  if (data) return data;
   const demo = generateDemoBudgets();
   localStorage.setItem(STORAGE_KEYS.BUDGETS, JSON.stringify(demo));
   return demo;
@@ -149,7 +188,12 @@ export const api = {
   getExpenses: async () => ({ expenses: getLocalExpenses() }),
   addExpense: async (expense: Omit<Expense, 'id'>) => {
     const expenses = getLocalExpenses();
-    const newExpense = { ...expense, id: `exp_${Date.now()}` };
+    const newExpense = normalizeExpense({
+      ...expense,
+      id: makeId('exp'),
+      date: expense.date || new Date().toISOString().split('T')[0],
+      source: expense.source || 'manual',
+    } as Expense);
     saveLocalExpenses([newExpense, ...expenses]);
     return newExpense;
   },
@@ -157,7 +201,7 @@ export const api = {
     const expenses = getLocalExpenses();
     const idx = expenses.findIndex(e => e.id === id);
     if (idx > -1) {
-      expenses[idx] = { ...expenses[idx], ...updates };
+      expenses[idx] = normalizeExpense({ ...expenses[idx], ...updates });
       saveLocalExpenses(expenses);
       return expenses[idx];
     }
@@ -198,7 +242,29 @@ export const api = {
   },
 
   // AI/ML (Fallback to Demo/Local logic as these run purely client-side or mocked now)
-  categorizeExpense: async (description: string, amount: number) => ({ category: 'Others', confidence: 0.5 }), // Substituted by our local classifier.ts where needed
+  categorizeExpense: async (description: string, amount: number) => {
+    try {
+      const res = await fetch(`${API_URL}/smart-categorizer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'categorize', description, amount }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.category) {
+          return {
+            category: normalizeExpenseCategory(data.category),
+            confidence: Number(data.confidence || 0),
+            source: 'edge',
+            matchedKeywords: data.matchedKeywords || [],
+          };
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return { category: 'Others', confidence: 0.5, source: 'local-fallback', matchedKeywords: [] };
+  },
   getPredictions: async () => {
     const expenses = getLocalExpenses();
     const total = expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -263,7 +329,17 @@ export const api = {
     return { insights };
   },
   processReceipt: async (imageData: string) => {
-    // OCR logic moved mostly to client side tesseract, this is a fallback mock
+    // OCR logic mostly client-side. Edge fallback parses OCR text if supplied.
+    try {
+      const res = await fetch(`${API_URL}/smart-categorizer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'parse-receipt', text: imageData }),
+      });
+      if (res.ok) return await res.json();
+    } catch {
+      // fallback
+    }
     return { text: "Scan successful" };
   },
 
@@ -271,7 +347,9 @@ export const api = {
   getAnalytics: async () => {
     const expenses = getLocalExpenses();
     const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
-    const averageExpense = expenses.length > 0 ? totalExpenses / expenses.length : 0;
+    const outflow = expenses.filter(e => e.amount > 0).reduce((sum, e) => sum + e.amount, 0);
+    const inflow = Math.abs(expenses.filter(e => e.amount < 0).reduce((sum, e) => sum + e.amount, 0));
+    const averageExpense = expenses.length > 0 ? outflow / (expenses.filter(e => e.amount > 0).length || 1) : 0;
 
     // Build Category Breakdown
     const catMap: Record<string, number> = {};
@@ -279,7 +357,7 @@ export const api = {
       catMap[e.category] = (catMap[e.category] || 0) + e.amount;
     });
     const categoryBreakdown = Object.entries(catMap)
-      .map(([category, amount]) => ({ category, amount, percentage: (amount / totalExpenses) * 100 }))
+      .map(([category, amount]) => ({ category, amount, percentage: totalExpenses === 0 ? 0 : (amount / totalExpenses) * 100 }))
       .sort((a, b) => b.amount - a.amount);
 
     // Build Payment Method Breakdown
@@ -289,17 +367,40 @@ export const api = {
       payMap[method] = (payMap[method] || 0) + e.amount;
     });
     const paymentMethodBreakdown = Object.entries(payMap)
-      .map(([method, amount]) => ({ method, amount, percentage: (amount / totalExpenses) * 100 }))
+      .map(([method, amount]) => ({ method, amount, percentage: totalExpenses === 0 ? 0 : (amount / totalExpenses) * 100 }))
       .sort((a, b) => b.amount - a.amount);
 
+    // Week-by-week trend for current month
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const monthExpenses = expenses.filter(e => {
+      const d = new Date(e.date);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+    const weeklyTrend = Array.from({ length: 5 }, (_, i) => {
+      const start = i * 7 + 1;
+      const end = (i + 1) * 7;
+      const weekAmount = monthExpenses
+        .filter(e => {
+          const day = new Date(e.date).getDate();
+          return day >= start && day <= end;
+        })
+        .reduce((sum, e) => sum + e.amount, 0);
+      return { week: `Week ${i + 1}`, amount: weekAmount };
+    }).filter(w => w.amount !== 0);
+
     return {
-      totalMonthly: totalExpenses, // roughly
+      totalMonthly: totalExpenses, // net value
+      totalOutflow: outflow,
+      totalInflow: inflow,
       totalExpenses: expenses.length,
       averageExpense,
       topCategory: categoryBreakdown.length > 0 ? categoryBreakdown[0].category : 'Unknown',
       transactionCount: expenses.length,
       categoryBreakdown,
       paymentMethodBreakdown,
+      weeklyTrend,
     };
   },
 

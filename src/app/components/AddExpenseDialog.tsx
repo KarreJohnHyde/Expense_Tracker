@@ -11,17 +11,9 @@ import { toast } from 'sonner';
 import { Badge } from './ui/badge';
 import { useCurrency } from '../lib/currency';
 import { classifyExpense } from '../lib/classifier';
+import { EXPENSE_CATEGORIES, type ExpenseSource } from '../lib/expenseSchema';
 
-const CATEGORIES = [
-  'Food & Dining',
-  'Transportation',
-  'Shopping',
-  'Bills & Utilities',
-  'Entertainment',
-  'Healthcare',
-  'Education',
-  'Others',
-];
+const CATEGORIES = [...EXPENSE_CATEGORIES];
 
 const PAYMENT_METHODS = ['Cash', 'Credit Card', 'Debit Card', 'UPI', 'Net Banking', 'Wallet'];
 
@@ -59,6 +51,7 @@ interface ExpenseSeedData {
   recurringPeriod: string;
   splitWith: string;
   receiptImage: string | null;
+  source: string;
 }
 
 export function AddExpenseDialog({
@@ -91,6 +84,7 @@ export function AddExpenseDialog({
   const [receiptRemoved, setReceiptRemoved] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
   const [splitWith, setSplitWith] = useState('');
+  const [entrySource, setEntrySource] = useState<ExpenseSource>('manual');
 
   const [formData, setFormData] = useState({
     amount: '',
@@ -158,6 +152,7 @@ export function AddExpenseDialog({
       setReceiptRemoved(false);
       setIsRecurring(Boolean(data.recurring));
       setSplitWith(data.splitWith || '');
+      setEntrySource((data.source as ExpenseSource) || 'manual');
       setAiSuggestion(null);
     }
   }, [initialData, open, currency.rate]);
@@ -174,12 +169,17 @@ export function AddExpenseDialog({
     if (!formData.description) return;
     setAiLoading(true);
     try {
-      // Use local client-side classifier as requested
-      const result = classifyExpense(formData.description);
-      setAiSuggestion(result);
+      const amount = parseFloat(formData.amount || '0') || 0;
+      const result = await api.categorizeExpense(formData.description, amount);
+      if (result?.category) {
+        setAiSuggestion({ category: result.category, confidence: result.confidence || 0 });
+      } else {
+        const fallback = classifyExpense(formData.description);
+        setAiSuggestion(fallback);
+      }
     } catch {
-      // Silent fail
-      setAiSuggestion({ category: 'Others', confidence: 0 });
+      const fallback = classifyExpense(formData.description);
+      setAiSuggestion(fallback);
     } finally {
       setAiLoading(false);
     }
@@ -202,6 +202,7 @@ export function AddExpenseDialog({
     setReceiptRemoved(false);
     setIsRecurring(false);
     setSplitWith('');
+    setEntrySource('manual');
     setCustomCategory('');
     setIsCustomCategory(false);
   };
@@ -223,6 +224,7 @@ export function AddExpenseDialog({
           tags: tagsArray,
           category: finalCategory,
           receiptImage,
+          source: entrySource,
           ...(isRecurring && { recurring: true, recurringPeriod: formData.recurringPeriod }),
           ...(splitWith && { splitWith }),
         });
@@ -235,6 +237,7 @@ export function AddExpenseDialog({
           tags: tagsArray,
           category: finalCategory,
           receiptImage,
+          source: entrySource,
           ...(isRecurring && { recurring: true, recurringPeriod: formData.recurringPeriod }),
           ...(splitWith && { splitWith }),
         });
@@ -256,6 +259,7 @@ export function AddExpenseDialog({
   const processImageWithTesseract = async (imageSrc: string) => {
     setReceiptPreview(imageSrc);
     setReceiptRemoved(false);
+    setEntrySource('receipt_scan');
     setLoading(true);
     try {
       const tesseractMod = await import('tesseract.js');
@@ -293,6 +297,32 @@ export function AddExpenseDialog({
 
   const [qrScanning, setQrScanning] = useState(false);
 
+  const buildScanPreview = (decodedText: string) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 900;
+    canvas.height = 520;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const bg = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    bg.addColorStop(0, '#0f172a');
+    bg.addColorStop(1, '#1e293b');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#22d3ee';
+    ctx.font = 'bold 28px Arial';
+    ctx.fillText('QR / Barcode Capture', 36, 58);
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '18px Arial';
+    ctx.fillText(new Date().toLocaleString(), 36, 90);
+    ctx.strokeStyle = '#334155';
+    ctx.strokeRect(28, 120, canvas.width - 56, canvas.height - 160);
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = '20px monospace';
+    const lines = decodedText.match(/.{1,58}/g) || [decodedText];
+    lines.slice(0, 10).forEach((line, idx) => ctx.fillText(line, 48, 164 + idx * 30));
+    return canvas.toDataURL('image/jpeg', 0.9);
+  };
+
   const startQRScanner = async () => {
     setQrScanning(true);
     try {
@@ -310,9 +340,21 @@ export function AddExpenseDialog({
               const pn = url.searchParams.get('pn') || '';
               const am = url.searchParams.get('am') || '';
               setFormData({ ...formData, description: `UPI: ${pn}`, amount: am, paymentMethod: 'UPI' });
+              setEntrySource('qr_scan');
+              const scanPreview = buildScanPreview(decodedText);
+              if (scanPreview) {
+                setReceiptPreview(scanPreview);
+                setReceiptRemoved(false);
+              }
               toast.success('Extracted UPI details from QR!');
             } else {
               setFormData({ ...formData, description: decodedText });
+              setEntrySource(/^\d+$/.test(decodedText.trim()) ? 'barcode_scan' : 'qr_scan');
+              const scanPreview = buildScanPreview(decodedText);
+              if (scanPreview) {
+                setReceiptPreview(scanPreview);
+                setReceiptRemoved(false);
+              }
               toast.success('Scanned Barcode/QR successfully');
             }
           },

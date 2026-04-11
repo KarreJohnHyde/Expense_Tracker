@@ -12,24 +12,33 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['vite.svg'],
+      includeAssets: ['expense-ai-logo.png', 'icons/apple-touch-icon.png'],
       manifest: {
-        name: 'Expense Tracker AI',
+        name: 'Expense AI Mobile',
         short_name: 'Expense AI',
-        description: 'Serverless Expense Tracker with AI capabilities',
+        description: 'Mobile-first AI expense tracker with scans, voice, budgets, and market insights',
         theme_color: '#10b981',
         background_color: '#ffffff',
         display: 'standalone',
+        orientation: 'portrait-primary',
+        start_url: '/',
+        scope: '/',
         icons: [
           {
-            src: 'vite.svg',
+            src: 'icons/icon-192.png',
             sizes: '192x192',
-            type: 'image/svg+xml'
+            type: 'image/png'
           },
           {
-            src: 'vite.svg',
+            src: 'icons/icon-512.png',
             sizes: '512x512',
-            type: 'image/svg+xml'
+            type: 'image/png'
+          },
+          {
+            src: 'icons/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable'
           }
         ],
         share_target: {

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { api, Expense } from '../lib/api';
 import { Skeleton } from '../components/ui/skeleton';
-import { Search, Image as ImageIcon, QrCode, FileText, Calendar } from 'lucide-react';
+import { Search, Image as ImageIcon, QrCode, FileText, Calendar, Barcode, Camera } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { useCurrency } from '../lib/currency';
@@ -23,8 +23,8 @@ export default function Gallery() {
     setLoading(true);
     try {
       const data = await api.getExpenses();
-      // Only keep expenses that have an image
-      setExpenses(data.expenses.filter(e => !!e.receiptImage));
+      // Keep media entries + captured scans.
+      setExpenses(data.expenses.filter(e => !!e.receiptImage || !!e.scanData?.rawText));
     } catch (error) {
       console.error('Failed to load gallery', error);
     } finally {
@@ -34,7 +34,8 @@ export default function Gallery() {
 
   const filtered = expenses.filter(e => 
     e.description.toLowerCase().includes(search.toLowerCase()) || 
-    e.category.toLowerCase().includes(search.toLowerCase())
+    e.category.toLowerCase().includes(search.toLowerCase()) ||
+    e.scanData?.rawText?.toLowerCase()?.includes(search.toLowerCase())
   );
 
   if (loading) {
@@ -86,24 +87,38 @@ export default function Gallery() {
           {filtered.map(expense => (
             <Card key={expense.id} className="overflow-hidden group card-hover glass border-border/40">
               <div className="relative h-48 w-full bg-muted">
-                {/* Image */}
-                <img 
-                  src={expense.receiptImage as string} 
-                  alt={expense.description}
-                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                />
+                {expense.receiptImage ? (
+                  <img 
+                    src={expense.receiptImage as string} 
+                    alt={expense.description}
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="h-full w-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-slate-800 to-slate-900 text-slate-100 px-3">
+                    {expense.scanData?.type === 'barcode' ? <Barcode className="size-8 text-cyan-300" /> : <QrCode className="size-8 text-cyan-300" />}
+                    <p className="text-xs text-center line-clamp-4">{expense.scanData?.rawText || 'Captured scan'}</p>
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
                 
                 {/* Meta overlays */}
                 <div className="absolute top-2 left-2 flex gap-2">
                   <Badge variant="secondary" className="bg-background/80 backdrop-blur">
-                    {expense.description.includes('UPI') || expense.description.includes('QR') ? (
+                    {expense.scanData?.type === 'barcode' ? (
+                       <Barcode className="size-3 mr-1" />
+                    ) : expense.scanData?.type === 'qr' || expense.description.includes('UPI') || expense.description.includes('QR') ? (
                        <QrCode className="size-3 mr-1" />
                     ) : (
                        <FileText className="size-3 mr-1" />
                     )}
                     {expense.category}
                   </Badge>
+                  {expense.source && (
+                    <Badge variant="outline" className="bg-background/80 backdrop-blur">
+                      {expense.source === 'receipt_scan' ? <Camera className="size-3 mr-1" /> : <ImageIcon className="size-3 mr-1" />}
+                      {expense.source.replace('_', ' ')}
+                    </Badge>
+                  )}
                 </div>
                 
                 <div className="absolute bottom-2 left-2 right-2 flex flex-col pointer-events-none">

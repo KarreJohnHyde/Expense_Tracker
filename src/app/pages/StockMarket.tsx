@@ -275,9 +275,16 @@ export default function StockMarket() {
     api.addExpense({
       description: `Bought ${tradeQuantity} shares of ${selectedStock.symbol}`,
       amount: value,
-      category: 'Investments',
+      category: 'Investments & Savings',
       date: new Date().toISOString().split('T')[0],
-      paymentMethod: 'Net Banking'
+      paymentMethod: 'Net Banking',
+      source: 'stock_trade',
+      metadata: {
+        action: 'buy',
+        symbol: selectedStock.symbol,
+        quantity: tradeQuantity,
+        unitPrice: selectedStock.price,
+      },
     }).catch(console.error);
 
     toast.success(`Bought ${tradeQuantity} shares of ${selectedStock.symbol} at ${formatCurrency(selectedStock.price)}`);
@@ -318,9 +325,17 @@ export default function StockMarket() {
     api.addExpense({
       description: `Sold ${tradeQuantity} shares of ${selectedStock.symbol}`,
       amount: -value,
-      category: 'Investments',
+      category: 'Investments & Savings',
       date: new Date().toISOString().split('T')[0],
-      paymentMethod: 'Net Banking'
+      paymentMethod: 'Net Banking',
+      source: 'stock_trade',
+      metadata: {
+        action: 'sell',
+        symbol: selectedStock.symbol,
+        quantity: tradeQuantity,
+        unitPrice: selectedStock.price,
+        pnl: profit,
+      },
     }).catch(console.error);
 
     toast.success(`Sold ${tradeQuantity} shares of ${selectedStock.symbol} at ${formatCurrency(selectedStock.price)}. P&L: ${formatCurrency(profit)}`);

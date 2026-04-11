@@ -1,3 +1,5 @@
+import { VOICE_TEST_CASES, VOICE_TRAINING_PHRASES, type VoiceParserTestCase } from './voiceParserDataset';
+
 export interface VoiceExpenseResult {
   description: string;
   amount?: string;
@@ -33,11 +35,38 @@ function normalizeAmount(value: string): string {
   return value.replace(/,/g, '');
 }
 
+function parseScaledAmount(raw: string, unit?: string): string {
+  const base = parseFloat(normalizeAmount(raw));
+  if (!Number.isFinite(base)) return raw;
+
+  const u = (unit || '').toLowerCase();
+  let multiplier = 1;
+  if (u === 'k' || u === 'thousand') multiplier = 1_000;
+  if (u === 'lakh' || u === 'lac') multiplier = 100_000;
+  if (u === 'crore' || u === 'cr') multiplier = 10_000_000;
+
+  return String(Math.round(base * multiplier));
+}
+
 function extractAmount(text: string): string | undefined {
+  const intentMatch = text.match(/(?:for|of|worth|cost|spent|paid|bought|amount)\s*(?:₹|rs\.?|inr|usd|\$)?\s*([\d,]+(?:\.\d{1,2})?)\s*(k|thousand|lakh|lac|crore|cr)?\b/i);
+  if (intentMatch?.[1]) return parseScaledAmount(intentMatch[1], intentMatch[2]);
+
+  const scaledMatch = text.match(/(?:₹|rs\.?|inr|usd|\$)?\s*([\d,]+(?:\.\d{1,2})?)\s*(k|thousand|lakh|lac|crore|cr)\b/i);
+  if (scaledMatch?.[1]) return parseScaledAmount(scaledMatch[1], scaledMatch[2]);
+
   const currencyMatch = text.match(/(?:₹|rs\.?|inr|usd|\$|dollars?|bucks?)\s*([\d,]+(?:\.\d{1,2})?)/i);
   if (currencyMatch?.[1]) return normalizeAmount(currencyMatch[1]);
-  const genericMatch = text.match(/\b([\d,]+(?:\.\d{1,2})?)\b/);
-  if (genericMatch?.[1]) return normalizeAmount(genericMatch[1]);
+
+  const genericMatches = [...text.matchAll(/\b([\d,]+(?:\.\d{1,2})?)\b/g)];
+  for (const match of genericMatches) {
+    const candidate = parseFloat(normalizeAmount(match[1]));
+    if (!Number.isFinite(candidate)) continue;
+    // Skip likely years from date-like utterances unless it's the only number.
+    if (candidate >= 1900 && candidate <= 2100 && genericMatches.length > 1) continue;
+    return normalizeAmount(match[1]);
+  }
+
   return undefined;
 }
 
@@ -45,6 +74,26 @@ function detectCategory(text: string): string | undefined {
   for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
     if (keywords.some(k => text.includes(k))) return category;
   }
+
+  // Phrase-level fallback using curated training utterances.
+  const textTokens = new Set(text.split(/\s+/).filter(Boolean));
+  let bestCategory: string | undefined;
+  let bestScore = 0;
+
+  for (const [category, phrases] of Object.entries(VOICE_TRAINING_PHRASES)) {
+    for (const phrase of phrases) {
+      const phraseTokens = phrase.toLowerCase().split(/\s+/).filter(Boolean);
+      if (phraseTokens.length === 0) continue;
+      const overlap = phraseTokens.filter(token => textTokens.has(token)).length;
+      const score = overlap / phraseTokens.length;
+      if (score > bestScore) {
+        bestScore = score;
+        bestCategory = category;
+      }
+    }
+  }
+
+  if (bestScore >= 0.35) return bestCategory;
   return undefined;
 }
 
@@ -205,5 +254,26 @@ export function parseVoiceExpense(text: string): VoiceExpenseResult {
     category,
     paymentMethod,
     date,
+  };
+}
+
+export function evaluateVoiceParser(testCases: VoiceParserTestCase[] = VOICE_TEST_CASES) {
+  let amountHit = 0;
+  let categoryHit = 0;
+  let paymentHit = 0;
+
+  for (const test of testCases) {
+    const parsed = parseVoiceExpense(test.utterance);
+    if (!test.expected.amount || parsed.amount === test.expected.amount) amountHit++;
+    if (!test.expected.category || parsed.category === test.expected.category) categoryHit++;
+    if (!test.expected.paymentMethod || parsed.paymentMethod === test.expected.paymentMethod) paymentHit++;
+  }
+
+  const total = testCases.length || 1;
+  return {
+    totalCases: testCases.length,
+    amountAccuracy: Math.round((amountHit / total) * 100),
+    categoryAccuracy: Math.round((categoryHit / total) * 100),
+    paymentMethodAccuracy: Math.round((paymentHit / total) * 100),
   };
 }

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import Tesseract from 'tesseract.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -22,17 +22,9 @@ import { api } from '../lib/api';
 import { useCurrency } from '../lib/currency';
 import { notifyUser } from '../lib/notifications';
 import { classifyExpense } from '../lib/classifier';
+import { EXPENSE_CATEGORIES } from '../lib/expenseSchema';
 
-const CATEGORIES = [
-  'Food & Dining',
-  'Transportation',
-  'Shopping',
-  'Bills & Utilities',
-  'Entertainment',
-  'Healthcare',
-  'Education',
-  'Others',
-];
+const CATEGORIES = [...EXPENSE_CATEGORIES];
 
 const PAYMENT_METHODS = ['Cash', 'Credit Card', 'Debit Card', 'UPI', 'Net Banking'];
 
@@ -46,9 +38,17 @@ export default function ScanReceipt() {
   const [saving, setSaving] = useState(false);
   const [showWebcam, setShowWebcam] = useState(false);
   const [qrResult, setQrResult] = useState<string>('');
+  const [scanSource, setScanSource] = useState<'manual' | 'receipt_scan' | 'qr_scan' | 'barcode_scan'>('manual');
+  const [scanMetadata, setScanMetadata] = useState<{
+    type: 'ocr_receipt' | 'qr' | 'barcode';
+    rawText: string;
+    format?: string;
+    capturedAt: string;
+  } | null>(null);
 
   const webcamRef = useRef<Webcam>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const qrScannerRef = useRef<any>(null);
 
   const [formData, setFormData] = useState({
     description: '',
@@ -67,11 +67,31 @@ export default function ScanReceipt() {
   const capturePhoto = useCallback(() => {
     const imageSrc = webcamRef.current?.getScreenshot();
     if (imageSrc) {
+      setScanSource('receipt_scan');
       setImage(imageSrc);
       setShowWebcam(false);
       processImage(imageSrc);
     }
   }, [webcamRef]);
+
+  const stopQRScanner = useCallback(async () => {
+    try {
+      if (qrScannerRef.current) {
+        await qrScannerRef.current.stop();
+        await qrScannerRef.current.clear();
+      }
+    } catch {
+      // scanner may already be stopped
+    } finally {
+      qrScannerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      stopQRScanner();
+    };
+  }, [stopQRScanner]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -79,6 +99,7 @@ export default function ScanReceipt() {
       const reader = new FileReader();
       reader.onload = (e) => {
         const imageSrc = e.target?.result as string;
+        setScanSource('receipt_scan');
         setImage(imageSrc);
         processImage(imageSrc);
       };
@@ -103,6 +124,11 @@ export default function ScanReceipt() {
 
       const text = result.data.text;
       setOcrText(text);
+      setScanMetadata({
+        type: 'ocr_receipt',
+        rawText: text,
+        capturedAt: new Date().toISOString(),
+      });
 
       // Extract information from OCR text
       const extracted = extractReceiptData(text);
@@ -202,8 +228,69 @@ export default function ScanReceipt() {
     return { merchant, total, date, category, paymentMethod };
   };
 
+  const captureScannerFrame = (): string | null => {
+    try {
+      const video = document.querySelector('#qr-reader video') as HTMLVideoElement | null;
+      if (!video || !video.videoWidth || !video.videoHeight) return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/jpeg', 0.92);
+    } catch {
+      return null;
+    }
+  };
+
+  const generateScanPlaceholder = (decodedText: string, format?: string): string => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 640;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+
+    const bg = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    bg.addColorStop(0, '#0f172a');
+    bg.addColorStop(1, '#111827');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#22d3ee';
+    ctx.font = 'bold 34px Arial';
+    ctx.fillText(format ? `${format} Captured` : 'QR/Barcode Captured', 48, 72);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '24px Arial';
+    ctx.fillText(new Date().toLocaleString(), 48, 112);
+
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(40, 150, canvas.width - 80, canvas.height - 200);
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '22px monospace';
+    const wrapped = decodedText.match(/.{1,70}/g) || [decodedText];
+    wrapped.slice(0, 12).forEach((line, idx) => {
+      ctx.fillText(line, 60, 200 + idx * 34);
+    });
+
+    return canvas.toDataURL('image/jpeg', 0.92);
+  };
+
   // QR/Barcode scan handler
-  const handleQRScan = (decodedText: string) => {
+  const handleQRScan = (decodedText: string, format?: string) => {
+    const frame = captureScannerFrame() || generateScanPlaceholder(decodedText, format);
+    setImage(frame);
+    setMode(null);
+    setScanSource(/qr/i.test(format || '') ? 'qr_scan' : 'barcode_scan');
+    setScanMetadata({
+      type: /qr/i.test(format || '') ? 'qr' : 'barcode',
+      rawText: decodedText,
+      format,
+      capturedAt: new Date().toISOString(),
+    });
     setQrResult(decodedText);
     toast.success('Code scanned successfully!');
 
@@ -304,12 +391,14 @@ export default function ScanReceipt() {
       // Small delay to ensure DOM element exists
       setTimeout(async () => {
         const scanner = new Html5Qrcode('qr-reader');
+        qrScannerRef.current = scanner;
         await scanner.start(
           { facingMode: 'environment' },
           { fps: 10, qrbox: { width: 250, height: 250 } },
-          (decodedText: string) => {
-            handleQRScan(decodedText);
-            scanner.stop().catch(() => {});
+          async (decodedText: string, decodedResult: any) => {
+            const format = decodedResult?.result?.format?.formatName || decodedResult?.result?.format?.toString?.();
+            handleQRScan(decodedText, format);
+            await stopQRScanner();
           },
           () => {} // ignore errors during scanning
         );
@@ -334,6 +423,8 @@ export default function ScanReceipt() {
         paymentMethod: formData.paymentMethod,
         date: formData.date,
         receiptImage: image,
+        source: scanSource,
+        scanData: scanMetadata,
       });
 
       toast.success('Expense saved successfully! 💰');
@@ -343,6 +434,8 @@ export default function ScanReceipt() {
       setOcrText('');
       setExtractedData(null);
       setMode(null);
+      setScanMetadata(null);
+      setScanSource('manual');
       setFormData({
         description: '',
         amount: '',
@@ -358,11 +451,14 @@ export default function ScanReceipt() {
   };
 
   const handleReset = () => {
+    stopQRScanner();
     setImage(null);
     setOcrText('');
     setExtractedData(null);
     setShowWebcam(false);
     setMode(null);
+    setScanMetadata(null);
+    setScanSource('manual');
   };
 
   return (
@@ -472,7 +568,10 @@ export default function ScanReceipt() {
               <CardTitle className="flex items-center gap-2">
                 <QrCode className="size-5" /> QR / Barcode Scanner
               </CardTitle>
-              <Button variant="ghost" size="icon" onClick={() => setMode(null)}>
+              <Button variant="ghost" size="icon" onClick={() => {
+                stopQRScanner();
+                setMode(null);
+              }}>
                 <X className="size-4" />
               </Button>
             </div>

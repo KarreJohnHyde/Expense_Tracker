@@ -7,13 +7,24 @@
     "dev": "vite",
     "dev:host": "vite --host",
     "build": "vite build",
+    "build:native": "pnpm build",
     "preview": "vite preview",
     "dev:tunnel": "concurrently -k \"pnpm dev:host\" \"pnpm tunnel\"",
+    "build:mobile": "pnpm build",
+    "bundle:netlify-drop": "pnpm build && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-netlify-drop-bundle.ps1",
+    "cap:add:android": "npx cap add android",
+    "cap:sync:android": "npx cap sync android",
+    "cap:open:android": "npx cap open android",
+    "cap:copy:android": "npx cap copy android",
+    "android:build:debug": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-android-debug.ps1",
+    "android:debug:apk": "pnpm build:native && pnpm cap:sync:android && pnpm android:build:debug",
     "deploy:vercel": "pnpm dlx vercel@latest --prod",
     "tunnel": "node tunnel-dev.js",
     "webhook": "node webhook-server.js"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",
     "@mui/icons-material": "7.3.5",
@@ -86,6 +97,8 @@
     "vaul": "1.1.2"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.3.0",
     "@tailwindcss/vite": "4.1.12",
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",

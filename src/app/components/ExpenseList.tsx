@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
 import { 
-  ShoppingBag, Utensils, Car, Zap, Film, Heart, BookOpen, 
+  ShoppingBag, Utensils, Car, Zap, Film, Heart, BookOpen, PiggyBank, Plane,
   Trash2, Edit 
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -37,6 +37,8 @@ const getCategoryIcon = (category: string) => {
     'Entertainment': Film,
     'Healthcare': Heart,
     'Education': BookOpen,
+    'Investments & Savings': PiggyBank,
+    'Travel & Holidays': Plane,
   };
   return icons[category] || ShoppingBag;
 };
@@ -50,6 +52,8 @@ const getCategoryColor = (category: string) => {
     'Entertainment': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
     'Healthcare': 'bg-red-500/10 text-red-500 border-red-500/20',
     'Education': 'bg-green-500/10 text-green-500 border-green-500/20',
+    'Investments & Savings': 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20',
+    'Travel & Holidays': 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20',
     'Others': 'bg-gray-500/10 text-gray-500 border-gray-500/20',
   };
   return colors[category] || colors['Others'];

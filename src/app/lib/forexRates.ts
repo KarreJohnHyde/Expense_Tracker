@@ -259,9 +259,16 @@ export function autoRecordTrade(trade: {
   api.addExpense({
     description: `Forex ${trade.type.toUpperCase()}: ${trade.pair} @ ${trade.rate.toFixed(4)}`,
     amount: trade.type === 'buy' ? trade.amount : -trade.amount,
-    category: 'Investments',
+    category: 'Investments & Savings',
     date: trade.date,
     paymentMethod: 'Forex Trading',
+    source: 'forex_trade',
+    metadata: {
+      pair: trade.pair,
+      type: trade.type,
+      rate: trade.rate,
+      amount: trade.amount,
+    },
   }).catch(console.error);
 
   return tradeEntry;

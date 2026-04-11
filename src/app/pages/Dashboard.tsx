@@ -15,6 +15,7 @@ import { Search, FileText, FileSpreadsheet, Sparkles, Calendar, Camera, Trending
 import { Card, CardContent } from '../components/ui/card';
 import { auth } from '../lib/auth';
 import { useNavigate } from 'react-router';
+import { EXPENSE_CATEGORIES } from '../lib/expenseSchema';
 
 interface Expense {
   id: string;
@@ -137,7 +138,7 @@ export default function Dashboard() {
     toast.success('Expenses exported successfully');
   };
 
-  const categories = ['Food & Dining', 'Transportation', 'Shopping', 'Bills & Utilities', 'Entertainment', 'Healthcare', 'Education', 'Others'];
+  const categories = [...EXPENSE_CATEGORIES];
   const paymentMethods = ['Cash', 'Credit Card', 'Debit Card', 'UPI', 'Net Banking'];
 
   // ── Skeleton loading state ─────────────────────────────────────────────
@@ -228,7 +229,7 @@ export default function Dashboard() {
             </div>
             <VoiceExpenseInput
               onTranscribed={(_text, data) => {
-                setVoicePrefillData(data);
+                setVoicePrefillData({ ...data, source: 'voice' });
                 setIsAddExpenseOpen(true);
               }}
             />

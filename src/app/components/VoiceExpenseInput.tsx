@@ -25,7 +25,8 @@ export function VoiceExpenseInput({ onTranscribed }: VoiceExpenseInputProps) {
     const recognition = new SpeechRecognition();
     recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.lang = 'en-US';
+    recognition.maxAlternatives = 3;
+    recognition.lang = navigator.language || 'en-IN';
 
     recognition.onstart = () => {
       setIsRecording(true);
@@ -33,7 +34,9 @@ export function VoiceExpenseInput({ onTranscribed }: VoiceExpenseInputProps) {
     };
 
     recognition.onresult = (event: any) => {
-      const text = event.results[0][0].transcript;
+      const alternatives = Array.from(event.results?.[0] || []).map((r: any) => r.transcript).filter(Boolean);
+      const fallback = event.results?.[0]?.[0]?.transcript || '';
+      const text = pickBestTranscript(alternatives.length ? alternatives : [fallback]);
       processVoiceInput(text);
     };
 
@@ -71,6 +74,26 @@ export function VoiceExpenseInput({ onTranscribed }: VoiceExpenseInputProps) {
     ].filter(Boolean);
 
     toast.success(`Heard: "${text}"${summaryParts.length ? ` • Parsed: ${summaryParts.join(' · ')}` : ''}`, { duration: 5000 });
+  };
+
+  const pickBestTranscript = (options: string[]) => {
+    let best = options[0] || '';
+    let bestScore = -1;
+
+    for (const candidate of options) {
+      const parsed = parseVoiceExpense(candidate);
+      let score = 0;
+      if (parsed.amount) score += 3;
+      if (parsed.category) score += 2;
+      if (parsed.paymentMethod) score += 2;
+      if (parsed.description && parsed.description.length >= 4) score += 1;
+      if (score > bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    }
+
+    return best;
   };
 
   const toggleRecording = () => {

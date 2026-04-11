@@ -28,7 +28,8 @@ const COLORS: Record<string, string> = {
   'Entertainment': '#a855f7',
   'Healthcare': '#ef4444',
   'Education': '#22c55e',
-  'Trading': '#06b6d4',
+  'Investments & Savings': '#06b6d4',
+  'Travel & Holidays': '#6366f1',
   'Others': '#6b7280',
 };
 

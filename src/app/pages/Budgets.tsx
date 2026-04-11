@@ -12,17 +12,9 @@ import { Plus, Target, AlertTriangle, CheckCircle, Edit, Trash2 } from 'lucide-r
 import { Badge } from '../components/ui/badge';
 import { useCurrency } from '../lib/currency';
 import { Budget, Expense } from '../lib/api';
+import { EXPENSE_CATEGORIES } from '../lib/expenseSchema';
 
-const CATEGORIES = [
-  'Food & Dining',
-  'Transportation',
-  'Shopping',
-  'Bills & Utilities',
-  'Entertainment',
-  'Healthcare',
-  'Education',
-  'Others',
-];
+const CATEGORIES = [...EXPENSE_CATEGORIES];
 
 export default function Budgets() {
   const { currency, formatCurrency } = useCurrency();
@@ -122,7 +114,8 @@ export default function Budgets() {
       );
     });
 
-    return categoryExpenses.reduce((sum, e) => sum + e.amount, 0);
+    // Budgets track outgoing spend; negative values are inflow/refund/trade exits.
+    return categoryExpenses.reduce((sum, e) => sum + (e.amount > 0 ? e.amount : 0), 0);
   };
 
   const getBudgetStatus = (spent: number, budget: number) => {
