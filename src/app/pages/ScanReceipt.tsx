@@ -207,8 +207,20 @@ export default function ScanReceipt() {
     setQrResult(decodedText);
     toast.success('Code scanned successfully!');
 
+    // Check if it's a multiline receipt text embedded in QR
+    if (decodedText.includes('\n') && (decodedText.toLowerCase().includes('total') || decodedText.toLowerCase().includes('amount') || decodedText.toLowerCase().includes('merchant') || decodedText.toLowerCase().includes('tax'))) {
+      const extracted = extractReceiptData(decodedText);
+      setFormData({
+        description: extracted.merchant || 'QR Receipt Scan',
+        amount: extracted.total || '',
+        category: extracted.category || 'Others',
+        paymentMethod: extracted.paymentMethod || 'Cash',
+        date: extracted.date || new Date().toISOString().split('T')[0],
+      });
+      toast.success('Receipt Data Extracted from QR Code');
+    } 
     // Intelligent AI-like pattern detection
-    if (decodedText.toLowerCase().startsWith('upi://pay')) {
+    else if (decodedText.toLowerCase().startsWith('upi://pay')) {
       try {
         const url = new URL(decodedText);
         const pa = url.searchParams.get('pa') || '';
@@ -247,19 +259,32 @@ export default function ScanReceipt() {
       });
       toast.info('Contact Card Detected');
     } else if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
-      // URL: offer to open
+      // URL: prefill as expense + open
       window.open(decodedText, '_blank');
-      toast.success('Navigated to URL');
+      try {
+        const urlObj = new URL(decodedText);
+        setFormData({
+          description: `Website Scan: ${urlObj.hostname}`,
+          amount: '',
+          category: 'Others',
+          paymentMethod: 'Cash',
+          date: new Date().toISOString().split('T')[0],
+        });
+        toast.success(`URL Captured & Opened: ${urlObj.hostname}`);
+      } catch {
+        toast.success('Navigated to URL');
+      }
     } else {
-      // General Barcode / Product Code
+      // General Barcode / Product Code / Single line String
+      const codeType = /^\d+$/.test(decodedText.trim()) ? 'Barcode' : 'QR Scan';
       setFormData({
-        description: `Scanned Item/Product: ${decodedText.slice(0, 20)}`,
+        description: `${codeType}: ${decodedText.length > 50 ? decodedText.slice(0, 50) + '...' : decodedText}`,
         amount: '',
         category: 'Shopping',
         paymentMethod: 'Cash',
         date: new Date().toISOString().split('T')[0],
       });
-      toast.success('Product/General Barcode Detected');
+      toast.success(`${codeType} Detected and Captured`);
     }
 
     notifyUser({

@@ -23,6 +23,8 @@ import {
   Webhook,
   Search,
   Image as ImageIcon,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useState, useEffect, useRef } from 'react';
@@ -138,12 +140,20 @@ export default function Root() {
               !isSidebarOpen && 'justify-center px-4'
             )}
           >
-            {/* Icon */}
-            <motion.div layout className="relative shrink-0">
-              <div className="size-9 rounded-xl gradient-primary flex items-center justify-center shadow-md glow-primary-sm">
+            {/* Logo — click to toggle sidebar */}
+            <motion.button
+              layout
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="relative shrink-0 cursor-pointer group"
+              title={isSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+              whileHover={{ scale: 1.08, rotateY: 15 }}
+              whileTap={{ scale: 0.92, rotateY: -10 }}
+              style={{ perspective: 600 }}
+            >
+              <div className="size-9 rounded-xl gradient-primary flex items-center justify-center shadow-md glow-primary-sm transition-shadow group-hover:shadow-lg group-hover:shadow-primary/30">
                 <IndianRupee className="size-5 text-primary-foreground" />
               </div>
-            </motion.div>
+            </motion.button>
 
             <AnimatePresence initial={false}>
               {isSidebarOpen && (
@@ -158,17 +168,23 @@ export default function Root() {
                   <p className="text-[11px] text-muted-foreground mt-0.5 whitespace-nowrap">Serverless • AWS Native</p>
                 </motion.div>
               )}
+            </AnimatePresence>
 
-              {isSidebarOpen && !isTouchLayout && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0, display: 'none' }}
-                  className="flex flex-col items-center gap-3 shrink-0"
+            {/* Sidebar panel toggle icon */}
+            <AnimatePresence initial={false}>
+              {isSidebarOpen && (
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.5 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.5 }}
+                  whileHover={{ scale: 1.15 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setIsSidebarOpen(false)}
+                  className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+                  title="Collapse sidebar"
                 >
-                  <NotificationsPanel />
-                  <ThemeToggle />
-                </motion.div>
+                  <PanelLeftClose className="size-4" />
+                </motion.button>
               )}
             </AnimatePresence>
           </div>
@@ -178,26 +194,7 @@ export default function Root() {
             <LiveTime showIcon={isSidebarOpen} className={!isSidebarOpen ? "p-1.5" : ""} />
           </motion.div>
 
-          {/* Collapse toggle */}
-          <Button
-            variant="outline"
-            size="icon"
-            className={cn(
-              'absolute -right-3.5 top-[68px] z-50 size-7 rounded-full',
-              'bg-background border border-border shadow-md hidden lg:flex',
-              'hover:bg-accent hover:border-primary/30 transition-all duration-200'
-            )}
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          >
-            <motion.div
-              initial={false}
-              animate={{ rotate: isSidebarOpen ? 0 : 180 }}
-              transition={{ type: "spring", bounce: 0.4, duration: 0.5 }}
-              className="flex items-center justify-center"
-            >
-              <ChevronLeft className="size-3.5" />
-            </motion.div>
-          </Button>
+
 
           {/* Navigation list */}
           <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">

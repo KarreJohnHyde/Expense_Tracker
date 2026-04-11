@@ -304,4 +304,101 @@ export const api = {
   },
 
   exportData: async () => ({ success: true, data: getLocalExpenses() }),
+
+  // ── Advanced Edge Computing: Financial Intelligence ──────────────────
+  /**
+   * Calls the financial-intelligence Supabase Edge Function for
+   * server-side anomaly detection, forecasting, clustering, and trends.
+   * Falls back to a lightweight local computation if unreachable.
+   */
+  getFinancialIntelligence: async (action: 'anomalies' | 'forecast' | 'cluster' | 'trends' | 'full' = 'full') => {
+    const expenses = getLocalExpenses();
+
+    // Try edge function first
+    try {
+      const res = await fetch(`${API_URL}/financial-intelligence`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expenses, action }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return { ...data, source: 'edge' };
+      }
+    } catch {
+      // Edge unreachable — fall through to local computation
+    }
+
+    // ── Local fallback ──────────────────────────────────────────────────
+    const amounts = expenses.map(e => e.amount);
+    const avg = amounts.length > 0 ? amounts.reduce((a, b) => a + b, 0) / amounts.length : 0;
+    const sd = amounts.length > 1
+      ? Math.sqrt(amounts.reduce((s, v) => s + (v - avg) ** 2, 0) / (amounts.length - 1))
+      : 0;
+
+    // Anomalies
+    const anomalies = sd > 0
+      ? expenses
+          .map(e => ({ expense: e, zScore: Math.round(((e.amount - avg) / sd) * 100) / 100 }))
+          .filter(a => Math.abs(a.zScore) >= 1.5)
+          .map(a => ({
+            ...a,
+            severity: Math.abs(a.zScore) >= 3 ? 'severe' : Math.abs(a.zScore) >= 2.5 ? 'moderate' : 'mild' as const,
+            reason: a.zScore > 0
+              ? `₹${a.expense.amount} is ${a.zScore.toFixed(1)}σ above average ₹${avg.toFixed(0)}`
+              : `₹${a.expense.amount} is ${Math.abs(a.zScore).toFixed(1)}σ below average ₹${avg.toFixed(0)}`,
+          }))
+          .sort((a, b) => Math.abs(b.zScore) - Math.abs(a.zScore))
+      : [];
+
+    // Forecast (simple: average of monthly totals)
+    const monthMap = new Map<string, number>();
+    for (const exp of expenses) {
+      const d = new Date(exp.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthMap.set(key, (monthMap.get(key) || 0) + exp.amount);
+    }
+    const monthlyTotals = [...monthMap.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, total]) => ({ month, total }));
+    const lastMonthTotal = monthlyTotals.length > 0 ? monthlyTotals[monthlyTotals.length - 1].total : 0;
+
+    // Trends
+    const now = new Date();
+    const curMonth = now.getMonth();
+    const curYear = now.getFullYear();
+    const prevMonth = curMonth === 0 ? 11 : curMonth - 1;
+    const prevYear = curMonth === 0 ? curYear - 1 : curYear;
+    const catTrends: Record<string, { cur: number; prev: number }> = {};
+    for (const exp of expenses) {
+      const d = new Date(exp.date);
+      if (!catTrends[exp.category]) catTrends[exp.category] = { cur: 0, prev: 0 };
+      if (d.getMonth() === curMonth && d.getFullYear() === curYear) catTrends[exp.category].cur += exp.amount;
+      else if (d.getMonth() === prevMonth && d.getFullYear() === prevYear) catTrends[exp.category].prev += exp.amount;
+    }
+    const trends = Object.entries(catTrends).map(([category, { cur, prev }]) => {
+      const change = prev > 0 ? ((cur - prev) / prev) * 100 : cur > 0 ? 100 : 0;
+      return {
+        category,
+        currentMonth: Math.round(cur),
+        lastMonth: Math.round(prev),
+        changePercent: Math.round(change * 10) / 10,
+        direction: change > 5 ? 'up' : change < -5 ? 'down' : 'stable',
+      };
+    });
+
+    return {
+      anomalies,
+      forecast: {
+        predictedNextMonth: lastMonthTotal,
+        trend: 'stable' as const,
+        trendPercentage: 0,
+        monthlyTotals,
+      },
+      clusters: [{ centroid: Math.round(avg), label: 'All Expenses', count: expenses.length, avgAmount: Math.round(avg) }],
+      trends,
+      computedAt: new Date().toISOString(),
+      source: 'local-fallback',
+    };
+  },
 };

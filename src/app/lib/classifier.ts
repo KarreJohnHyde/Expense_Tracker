@@ -1,8 +1,9 @@
 /**
- * classifier.ts — Lightweight NLP classification for expense descriptions
+ * classifier.ts — Advanced NLP classification for expense descriptions
  * 
- * Uses keyword matching and TF-IDF inspired scoring to categorize text.
- * Implements a 70% confidence threshold as requested.
+ * Uses keyword matching, bigram analysis, and TF-IDF inspired scoring.
+ * Implements a 70% confidence threshold.
+ * Contains 200+ keywords across 9 categories.
  */
 
 export interface ClassificationResult {
@@ -18,47 +19,136 @@ const CATEGORIES = [
   "Shopping",
   "Bills & Utilities",
   "Entertainment",
+  "Investments & Savings",
+  "Travel & Holidays",
   "Others"
 ];
 
-// Extracted from train.csv
+// ── Extensive Training Data (200+ keywords) ──────────────────────────────────
 const TRAINING_DATA: Record<string, string[]> = {
   "Food & Dining": [
-    "swiggy", "zomato", "lunch", "dinner", "breakfast", "coffee", "dhaba", "food", 
-    "starbucks", "latte", "tea", "snacks", "ice cream", "parlor", "groceries", "supermart"
+    "swiggy", "zomato", "lunch", "dinner", "breakfast", "coffee", "dhaba", "food",
+    "starbucks", "latte", "tea", "snacks", "ice cream", "parlor", "groceries", "supermart",
+    "mcdonalds", "kfc", "dominos", "pizza", "burger", "subway", "bakers", "bakery", "sweet",
+    "biscuit", "water bottle", "juice", "beverage", "instamart", "blinkit", "zepto", "bigbasket",
+    "cafe", "canteen", "mess", "dining", "eats", "delivery", "takeaway",
+    "haldiram", "biryani", "chicken", "paneer", "dal", "rice", "noodles", "pasta",
+    "restaurant", "pub", "bar", "wine", "beer", "liquor", "alcohol",
+    "frozen food", "dairy", "milk", "bread", "eggs", "cheese", "butter",
+    "organic", "vegetable", "fruit", "meat", "fish", "seafood",
+    "dunkin", "costa", "barista", "chaayos", "third wave", "blue tokai"
   ],
   "Education": [
-    "pocket money", "tuition", "fees", "math", "textbook", "guides", "pens", 
-    "pencils", "stationaries", "university", "semester", "donation", "institution", "student", "organization"
+    "pocket money", "tuition", "fees", "math", "textbook", "guides", "pens",
+    "pencils", "stationaries", "university", "semester", "donation", "institution", "student", "organization",
+    "course", "udemy", "coursera", "certification", "exam", "college", "school", "hostel",
+    "notebook", "stationary", "tutor", "training", "workshop",
+    "skillshare", "linkedin learning", "edx", "mit", "stanford", "class",
+    "thesis", "dissertation", "research", "journal", "publication",
+    "library", "reference", "academic", "scholarship", "grant",
+    "coaching", "entrance", "competitive", "preparation", "study material",
+    "whitehat", "byju", "unacademy", "vedantu", "toppr"
   ],
   "Healthcare": [
-    "apollo", "hospital", "consultation", "emergency", "room", "icu", "dental", 
-    "surgery", "medical", "bills", "tests", "pharmacy", "tablets", "syrup", "physiotherapy", "treatment"
+    "apollo", "hospital", "consultation", "emergency", "room", "icu", "dental",
+    "surgery", "medical", "bills", "tests", "pharmacy", "tablets", "syrup", "physiotherapy", "treatment",
+    "clinic", "doctor", "health", "fitness", "gym", "cultfit", "medicine", "wellness", "checkup",
+    "blood test", "xray", "mri", "pharma", "cure", "therapy", "insurance",
+    "covid", "vaccine", "vaccination", "booster", "antigen", "pcr",
+    "optician", "glasses", "contact lens", "eye", "vision",
+    "ayurveda", "homeopathy", "naturopathy", "yoga", "meditation",
+    "ambulance", "nursing", "physiotherapy", "orthopedic", "pediatric",
+    "pharmeasy", "netmeds", "1mg", "medplus", "practo",
+    "protein", "supplement", "vitamin", "calcium", "omega"
   ],
   "Transportation": [
-    "uber", "ride", "office", "metro", "train", "pass", "recharge", "flight", 
-    "tickets", "mumbai", "petrol", "pump", "fuel", "ola", "airport", "bus", "hometown"
+    "uber", "ride", "office", "metro", "train", "pass", "recharge", "flight",
+    "tickets", "mumbai", "petrol", "pump", "fuel", "ola", "airport", "bus", "hometown",
+    "toll", "fastag", "parking", "diesel", "cng", "auto", "rickshaw", "cab", "commute",
+    "railways", "irctc", "airline", "indigo", "air india", "vistara", "scoot",
+    "rapido", "rapido bike", "shuttle", "carpool", "carpooling",
+    "ev charging", "electric vehicle", "tesla", "ather",
+    "servicing", "car wash", "tyre", "tire", "puncture", "mechanic",
+    "insurance premium", "rc renewal", "driving license",
+    "delhi", "bangalore", "hyderabad", "chennai", "kolkata", "pune"
   ],
   "Shopping": [
-    "amazon", "prime", "shopping", "zara", "clothing", "store", "smartphone", "purchase", "flipkart", "online"
+    "amazon", "prime", "shopping", "zara", "clothing", "store", "smartphone", "purchase", "flipkart", "online",
+    "myntra", "ajio", "meesho", "shoes", "apparel", "electronics", "laptop", "croma", "reliance",
+    "fashion", "cosmetics", "nykaa", "makeup", "gifts", "mall", "retail", "mart", "ikea", "furniture",
+    "h&m", "uniqlo", "levi", "nike", "adidas", "puma", "reebok",
+    "watch", "jewellery", "jewelry", "ring", "bracelet", "necklace",
+    "perfume", "fragrance", "deodorant", "body wash", "shampoo",
+    "headphones", "earbuds", "speaker", "charger", "cable", "adapter",
+    "kindle", "tablet", "ipad", "samsung", "apple", "iphone", "pixel",
+    "home decor", "curtains", "bedsheet", "pillow", "mattress",
+    "snapdeal", "tata cliq", "firstcry", "lenskart"
   ],
   "Bills & Utilities": [
-    "electricity", "utility", "bill", "water", "tax", "jio", "mobile", "broadband", "wifi"
+    "electricity", "utility", "bill", "water", "tax", "jio", "mobile", "broadband", "wifi",
+    "gas", "cylinder", "recharge", "airtel", "vi", "bsnl", "internet", "dth", "tatasky", "cable",
+    "municipal", "property tax", "maintenance", "rent", "lease",
+    "piped gas", "lpg", "indane", "bharat gas", "hp gas",
+    "society", "association", "apartment", "flat", "housing",
+    "postpaid", "prepaid", "data pack", "roaming",
+    "sewage", "garbage", "waste", "cleaning", "maid", "cook",
+    "insurance premium", "emi", "loan", "interest",
+    "act fibernet", "excitel", "hathway", "den", "you broadband"
   ],
   "Entertainment": [
-    "netflix", "subscription", "movie", "theater", "tickets", "spotify", "premium", "music"
+    "netflix", "subscription", "movie", "theater", "tickets", "spotify", "premium", "music",
+    "hotstar", "amazon prime", "zee5", "sony liv", "cinema", "pvr", "inox", "bookmyshow",
+    "event", "concert", "gaming", "steam", "playstation", "xbox", "app store", "play store",
+    "disney", "hulu", "hbo", "apple tv", "youtube premium", "twitch",
+    "bowling", "arcade", "amusement", "theme park", "water park",
+    "karaoke", "pub", "nightclub", "party", "celebration",
+    "board game", "puzzle", "comic", "manga", "anime",
+    "oculus", "vr", "virtual reality", "metaverse",
+    "spotify", "apple music", "gaana", "jiosaavn", "wynk",
+    "standup comedy", "improv", "open mic", "live show"
+  ],
+  "Investments & Savings": [
+    "mutual fund", "sip", "stock", "share", "equity", "nifty", "sensex",
+    "fixed deposit", "fd", "recurring deposit", "rd", "ppf", "epf", "nps",
+    "gold", "silver", "sovereign", "bond", "debenture", "treasury",
+    "crypto", "bitcoin", "ethereum", "binance", "coinbase", "wazirx",
+    "zerodha", "groww", "kuvera", "coin", "smallcase", "angel one",
+    "dividend", "return", "portfolio", "demat", "trading",
+    "savings", "piggy bank", "emergency fund", "retirement",
+    "real estate", "property", "land", "plot"
+  ],
+  "Travel & Holidays": [
+    "hotel", "resort", "airbnb", "oyo", "makemytrip", "goibibo", "booking",
+    "yatra", "cleartrip", "ixigo", "trip", "travel", "holiday", "vacation",
+    "passport", "visa", "embassy", "foreign exchange", "forex",
+    "luggage", "suitcase", "backpack", "travel bag",
+    "tourism", "sightseeing", "monument", "museum", "temple",
+    "cruise", "ferry", "yacht", "boat",
+    "adventure", "trekking", "hiking", "camping", "safari",
+    "souvenir", "postcard", "travel insurance"
   ]
 };
 
 /**
- * Preprocess text: lowercase and remove punctuation.
+ * Preprocess text: lowercase, remove punctuation, extract tokens.
  */
 function preprocess(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[^\w\s]/g, '')
     .split(/\s+/)
-    .filter(word => word.length > 2);
+    .filter(word => word.length > 1);
+}
+
+/**
+ * Generate bigrams for better multi-word matching.
+ */
+function getBigrams(tokens: string[]): string[] {
+  const bigrams: string[] = [];
+  for (let i = 0; i < tokens.length - 1; i++) {
+    bigrams.push(`${tokens[i]} ${tokens[i + 1]}`);
+  }
+  return bigrams;
 }
 
 export function classifyExpense(description: string): ClassificationResult {
@@ -68,16 +158,26 @@ export function classifyExpense(description: string): ClassificationResult {
     return { category: "Others", confidence: 0 };
   }
 
+  const bigrams = getBigrams(tokens);
   const scores: Record<string, number> = {};
   
   // Initialize scores
   CATEGORIES.forEach(cat => scores[cat] = 0);
 
-  // Simple keyword matching with weight
+  // Unigram matching (weight: 1)
   tokens.forEach(token => {
     Object.entries(TRAINING_DATA).forEach(([category, keywords]) => {
-      if (keywords.some(k => k.includes(token) || token.includes(k))) {
+      if (keywords.some(k => k === token || k.includes(token) || token.includes(k))) {
         scores[category] += 1;
+      }
+    });
+  });
+
+  // Bigram matching (weight: 2 — higher confidence for multi-word matches)
+  bigrams.forEach(bigram => {
+    Object.entries(TRAINING_DATA).forEach(([category, keywords]) => {
+      if (keywords.some(k => k === bigram || bigram.includes(k))) {
+        scores[category] += 2;
       }
     });
   });
@@ -105,3 +205,4 @@ export function classifyExpense(description: string): ClassificationResult {
 
   return { category: bestCategory, confidence };
 }
+

@@ -8,22 +8,25 @@ export interface VoiceExpenseResult {
 }
 
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  'Food & Dining': ['food', 'restaurant', 'cafe', 'coffee', 'dinner', 'lunch', 'breakfast', 'snack', 'swiggy', 'zomato', 'pizza', 'burger', 'chai'],
-  'Transportation': ['uber', 'ola', 'rapido', 'taxi', 'cab', 'ride', 'bus', 'metro', 'train', 'fuel', 'petrol', 'diesel', 'parking'],
-  'Shopping': ['shop', 'shopping', 'grocery', 'groceries', 'mall', 'amazon', 'flipkart', 'myntra', 'clothes', 'shoes'],
-  'Bills & Utilities': ['bill', 'electricity', 'water', 'gas', 'internet', 'broadband', 'recharge', 'mobile', 'dth', 'utility'],
-  'Entertainment': ['movie', 'cinema', 'netflix', 'prime', 'hotstar', 'spotify', 'game', 'concert'],
-  'Healthcare': ['hospital', 'pharmacy', 'doctor', 'clinic', 'medicine', 'medical', 'health', 'gym', 'fitness'],
-  'Education': ['course', 'class', 'school', 'college', 'udemy', 'coursera', 'book', 'tuition'],
+  'Food & Dining': ['food', 'restaurant', 'cafe', 'coffee', 'dinner', 'lunch', 'breakfast', 'snack', 'swiggy', 'zomato', 'pizza', 'burger', 'chai', 'mcdonalds', 'kfc', 'instamart', 'blinkit', 'zepto', 'supermarket', 'groceries', 'biryani', 'chicken', 'paneer', 'dominos', 'subway', 'bakery', 'tea', 'juice', 'dairy', 'milk', 'bread', 'haldiram', 'chaayos', 'rice', 'noodles', 'pasta'],
+  'Transportation': ['uber', 'ola', 'rapido', 'taxi', 'cab', 'ride', 'bus', 'metro', 'train', 'fuel', 'petrol', 'diesel', 'parking', 'flight', 'ticket', 'toll', 'fastag', 'auto', 'rickshaw', 'shuttle', 'carpool', 'commute', 'car wash', 'servicing', 'tyre', 'mechanic', 'irctc', 'indigo', 'vistara'],
+  'Shopping': ['shop', 'shopping', 'grocery', 'groceries', 'mall', 'amazon', 'flipkart', 'myntra', 'clothes', 'shoes', 'electronics', 'laptop', 'phone', 'gift', 'ajio', 'nykaa', 'croma', 'zara', 'h&m', 'nike', 'adidas', 'watch', 'jewellery', 'perfume', 'headphones', 'earbuds', 'iphone', 'samsung', 'furniture', 'ikea', 'mattress'],
+  'Bills & Utilities': ['bill', 'electricity', 'water', 'gas', 'internet', 'broadband', 'recharge', 'mobile', 'dth', 'utility', 'rent', 'maintenance', 'airtel', 'jio', 'bsnl', 'wifi', 'cylinder', 'lpg', 'society', 'apartment', 'emi', 'loan', 'insurance', 'postpaid', 'prepaid', 'maid', 'cook'],
+  'Entertainment': ['movie', 'cinema', 'netflix', 'prime', 'hotstar', 'spotify', 'game', 'concert', 'pvr', 'inox', 'bookmyshow', 'steam', 'playstation', 'subscription', 'disney', 'hbo', 'youtube premium', 'twitch', 'party', 'arcade', 'karaoke', 'nightclub', 'anime', 'standup comedy'],
+  'Healthcare': ['hospital', 'pharmacy', 'doctor', 'clinic', 'medicine', 'medical', 'health', 'gym', 'fitness', 'cultfit', 'apollo', 'tablet', 'pill', 'surgery', 'test', 'blood', 'vaccine', 'covid', 'xray', 'mri', 'yoga', 'meditation', 'protein', 'vitamin', 'pharmeasy', '1mg', 'practo', 'glasses', 'optician'],
+  'Education': ['course', 'class', 'school', 'college', 'udemy', 'coursera', 'book', 'tuition', 'fee', 'exam', 'certification', 'hostel', 'notebook', 'stationery', 'byju', 'unacademy', 'vedantu', 'coaching', 'library', 'research', 'thesis', 'scholarship', 'skillshare'],
+  'Investments & Savings': ['investment', 'mutual fund', 'sip', 'stock', 'share', 'equity', 'nifty', 'sensex', 'fixed deposit', 'fd', 'ppf', 'nps', 'gold', 'silver', 'crypto', 'bitcoin', 'ethereum', 'zerodha', 'groww', 'dividend', 'portfolio', 'demat', 'trading', 'savings'],
+  'Travel & Holidays': ['hotel', 'resort', 'airbnb', 'oyo', 'makemytrip', 'goibibo', 'trip', 'travel', 'holiday', 'vacation', 'passport', 'visa', 'luggage', 'tourism', 'sightseeing', 'trekking', 'hiking', 'camping', 'safari', 'cruise', 'booking'],
 };
 
 const PAYMENT_METHOD_KEYWORDS: Record<string, string[]> = {
-  'UPI': ['upi', 'gpay', 'google pay', 'phonepe', 'paytm', 'bhim', 'upi transfer'],
-  'Credit Card': ['credit', 'credit card', 'card credit'],
-  'Debit Card': ['debit', 'debit card', 'card debit'],
-  'Net Banking': ['net banking', 'netbanking', 'bank transfer', 'neft', 'rtgs', 'imps'],
-  'Wallet': ['wallet', 'amazon pay', 'paytm wallet'],
-  'Cash': ['cash', 'cash payment'],
+  'UPI': ['upi', 'gpay', 'google pay', 'phonepe', 'paytm', 'bhim', 'upi transfer', 'qr code', 'scan', 'upi id', 'pay'],
+  'Credit Card': ['credit', 'credit card', 'card credit', 'mastercard', 'visa', 'amex', 'rupay', 'hdfc card', 'icici card', 'sbi card'],
+  'Debit Card': ['debit', 'debit card', 'card debit', 'atm card'],
+  'Net Banking': ['net banking', 'netbanking', 'bank transfer', 'neft', 'rtgs', 'imps', 'wire', 'online transfer'],
+  'Wallet': ['wallet', 'amazon pay', 'paytm wallet', 'mobikwik', 'freecharge', 'simpl', 'lazypay'],
+  'Cash': ['cash', 'cash payment', 'hard cash', 'notes', 'change', 'coins'],
+  'EMI': ['emi', 'installment', 'monthly installment', 'bajaj emi'],
 };
 
 function normalizeAmount(value: string): string {
