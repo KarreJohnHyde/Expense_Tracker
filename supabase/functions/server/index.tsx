@@ -81,7 +81,7 @@ app.post("/make-server-8d54d463/expenses", async (c: Context) => {
 // Update expense
 app.put("/make-server-8d54d463/expenses/:id", async (c: Context) => {
   try {
-    const id = c.req.param('id');
+    const id = c.req.param('id') as string;
     const body = await c.req.json();
     
     const existingExpense = await kv.get(id);
@@ -106,7 +106,7 @@ app.put("/make-server-8d54d463/expenses/:id", async (c: Context) => {
 // Delete expense
 app.delete("/make-server-8d54d463/expenses/:id", async (c: Context) => {
   try {
-    const id = c.req.param('id');
+    const id = c.req.param('id') as string;
     await kv.del(id);
     return c.json({ success: true });
   } catch (error) {
@@ -148,6 +148,43 @@ app.post("/make-server-8d54d463/budgets", async (c: Context) => {
   } catch (error) {
     console.error('Error setting budget:', error);
     return c.json({ error: 'Failed to set budget', details: String(error) }, 500);
+  }
+});
+
+// Update budget
+app.put("/make-server-8d54d463/budgets/:id", async (c: Context) => {
+  try {
+    const id = c.req.param('id') as string;
+    const body = await c.req.json();
+    
+    const existingBudget = await kv.get(id);
+    if (!existingBudget) {
+      return c.json({ error: 'Budget not found' }, 404);
+    }
+
+    const updatedBudget = {
+      ...existingBudget,
+      ...body,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await kv.set(id, updatedBudget);
+    return c.json({ success: true, budget: updatedBudget });
+  } catch (error) {
+    console.error('Error updating budget:', error);
+    return c.json({ error: 'Failed to update budget', details: String(error) }, 500);
+  }
+});
+
+// Delete budget
+app.delete("/make-server-8d54d463/budgets/:id", async (c: Context) => {
+  try {
+    const id = c.req.param('id') as string;
+    await kv.del(id);
+    return c.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting budget:', error);
+    return c.json({ error: 'Failed to delete budget', details: String(error) }, 500);
   }
 });
 

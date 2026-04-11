@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Toaster } from '../components/ui/sonner';
 import { auth } from '../lib/auth';
 import { toast } from 'sonner';
@@ -118,10 +119,12 @@ export default function Root() {
       <Toaster position="top-center" expand richColors />
 
       {/* ── Desktop Sidebar ─────────────────────────────────────────────── */}
-      <aside
+      <motion.aside
+        layout
+        transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
         className={cn(
           'hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:flex-col',
-          'glass-sidebar transition-all duration-300 z-30 overflow-hidden',
+          'glass-sidebar z-30 overflow-hidden',
           sidebarWidth,
           isTouchLayout && 'lg:hidden'
         )}
@@ -131,36 +134,49 @@ export default function Root() {
           {/* Logo bar */}
           <div
             className={cn(
-              'flex items-center gap-3 px-5 py-5 border-b border-sidebar-border',
+              'flex items-center gap-3 px-5 py-5 border-b border-sidebar-border h-[77px]',
               !isSidebarOpen && 'justify-center px-4'
             )}
           >
             {/* Icon */}
-            <div className="relative shrink-0">
+            <motion.div layout className="relative shrink-0">
               <div className="size-9 rounded-xl gradient-primary flex items-center justify-center shadow-md glow-primary-sm">
                 <IndianRupee className="size-5 text-primary-foreground" />
               </div>
-            </div>
+            </motion.div>
 
-            {isSidebarOpen && (
-              <div className="flex-1 min-w-0 animate-fade-in-up">
-                <h1 className="text-base font-bold tracking-tight leading-none">ExpenseAI</h1>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Serverless • AWS Native</p>
-              </div>
-            )}
+            <AnimatePresence initial={false}>
+              {isSidebarOpen && (
+                <motion.div
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10, display: 'none' }}
+                  transition={{ duration: 0.2 }}
+                  className="flex-1 min-w-0"
+                >
+                  <h1 className="text-base font-bold tracking-tight leading-none whitespace-nowrap">ExpenseAI</h1>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 whitespace-nowrap">Serverless • AWS Native</p>
+                </motion.div>
+              )}
 
-            {isSidebarOpen && !isTouchLayout && (
-              <div className="flex flex-col items-center gap-3 shrink-0">
-                <NotificationsPanel />
-                <ThemeToggle />
-              </div>
-            )}
+              {isSidebarOpen && !isTouchLayout && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0, display: 'none' }}
+                  className="flex flex-col items-center gap-3 shrink-0"
+                >
+                  <NotificationsPanel />
+                  <ThemeToggle />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Live Time - Advanced Dashboard Feel */}
-          <div className={cn("px-4 py-3", !isSidebarOpen && "flex justify-center px-2")}>
+          <motion.div layout className={cn("px-4 py-3 shrink-0", !isSidebarOpen && "flex justify-center px-2")}>
             <LiveTime showIcon={isSidebarOpen} className={!isSidebarOpen ? "p-1.5" : ""} />
-          </div>
+          </motion.div>
 
           {/* Collapse toggle */}
           <Button
@@ -173,10 +189,14 @@ export default function Root() {
             )}
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
           >
-            {isSidebarOpen
-              ? <ChevronLeft  className="size-3.5" />
-              : <ChevronRight className="size-3.5" />
-            }
+            <motion.div
+              initial={false}
+              animate={{ rotate: isSidebarOpen ? 0 : 180 }}
+              transition={{ type: "spring", bounce: 0.4, duration: 0.5 }}
+              className="flex items-center justify-center"
+            >
+              <ChevronLeft className="size-3.5" />
+            </motion.div>
           </Button>
 
           {/* Navigation list */}
@@ -206,40 +226,60 @@ export default function Root() {
                     <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary rounded-r-full shadow-[0_0_6px_rgba(0,212,170,0.6)]" />
                   )}
 
-                  <item.icon
-                    className={cn(
-                      'size-[18px] shrink-0 relative z-10 transition-all duration-200',
-                      'group-hover:scale-110',
-                      isActive ? 'text-primary' : ''
+                  <motion.div layout className="relative z-10 size-[18px] flex items-center justify-center shrink-0">
+                    <item.icon
+                      className={cn(
+                        'size-[18px] transition-all duration-200',
+                        'group-hover:scale-110',
+                        isActive ? 'text-primary' : ''
+                      )}
+                    />
+                  </motion.div>
+
+                  <AnimatePresence initial={false}>
+                    {isSidebarOpen && (
+                      <motion.span
+                        initial={{ opacity: 0, x: -5, width: 0 }}
+                        animate={{ opacity: 1, x: 0, width: 'auto' }}
+                        exit={{ opacity: 0, x: -5, width: 0 }}
+                        className="relative z-10 whitespace-nowrap overflow-hidden block"
+                      >
+                        {item.name}
+                      </motion.span>
                     )}
-                  />
-                  {isSidebarOpen && (
-                    <span className="relative z-10 whitespace-nowrap">{item.name}</span>
-                  )}
+                  </AnimatePresence>
                 </Link>
               );
             })}
           </nav>
 
           {/* Footer: user + logout */}
-          <div className="border-t border-sidebar-border p-3 space-y-2">
+          <div className="border-t border-sidebar-border p-3 space-y-2 shrink-0">
             {user && (
-              <div
+              <motion.div
+                layout
                 className={cn(
                   'flex items-center gap-2.5 rounded-xl transition-all duration-300',
-                  isSidebarOpen ? 'p-2.5 glass' : 'justify-center'
+                  isSidebarOpen ? 'p-2.5 glass' : 'justify-center p-1 border border-transparent'
                 )}
               >
-                <div className="size-8 shrink-0 rounded-lg gradient-primary flex items-center justify-center text-primary-foreground font-semibold text-sm">
+                <motion.div layout className="size-8 shrink-0 rounded-lg gradient-primary flex items-center justify-center text-primary-foreground font-semibold text-sm">
                   {user.username.charAt(0).toUpperCase()}
-                </div>
-                {isSidebarOpen && (
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate leading-none">{user.username}</p>
-                    <p className="text-[11px] text-muted-foreground truncate mt-0.5">{user.email}</p>
-                  </div>
-                )}
-              </div>
+                </motion.div>
+                <AnimatePresence initial={false}>
+                  {isSidebarOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, width: 0 }}
+                      animate={{ opacity: 1, width: 'auto' }}
+                      exit={{ opacity: 0, width: 0 }}
+                      className="flex-1 min-w-0 overflow-hidden"
+                    >
+                      <p className="text-sm font-medium truncate leading-none">{user.username}</p>
+                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">{user.email}</p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
             )}
 
             <Button
@@ -252,24 +292,44 @@ export default function Root() {
               onClick={handleLogout}
               title={!isSidebarOpen ? 'Logout' : undefined}
             >
-              <LogOut className={cn('size-4', isSidebarOpen && 'mr-2')} />
-              {isSidebarOpen && 'Logout'}
+              <LogOut className={cn('size-4 shrink-0', isSidebarOpen && 'mr-2')} />
+              <AnimatePresence initial={false}>
+                {isSidebarOpen && (
+                  <motion.span
+                    initial={{ opacity: 0, width: 0 }}
+                    animate={{ opacity: 1, width: 'auto' }}
+                    exit={{ opacity: 0, width: 0 }}
+                    className="whitespace-nowrap overflow-hidden"
+                  >
+                    Logout
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </Button>
 
-            {isSidebarOpen && (
-              <div className="rounded-xl p-3 glass border border-primary/15 animate-pulse-glow">
-                <div className="flex items-center gap-2 mb-1">
-                  <Sparkles className="size-3.5 text-primary" />
-                  <p className="text-xs font-semibold text-primary">AI Powered</p>
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Smart insights with machine learning
-                </p>
-              </div>
-            )}
+            <AnimatePresence initial={false}>
+              {isSidebarOpen && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                  animate={{ opacity: 1, height: 'auto', marginTop: 8 }}
+                  exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="rounded-xl p-3 glass border border-primary/15">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Sparkles className="size-3.5 text-primary" />
+                      <p className="text-xs font-semibold text-primary">AI Powered</p>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Smart insights with machine learning
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
-      </aside>
+      </motion.aside>
 
       {/* ── Mobile / Touch Header ──────────────────────────────────────── */}
       <header
@@ -351,15 +411,16 @@ export default function Root() {
       )}
 
       {/* ── Main Content ───────────────────────────────────────────────── */}
-      <main
+      <motion.main
+        layout
+        transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
         className={cn(
-          'transition-all duration-300',
           !isTouchLayout && mainPadding
         )}
       >
         <div
           className={cn(
-            'mx-auto',
+            'mx-auto w-full transition-all duration-300',
             isTouchLayout
               ? 'px-4 py-4'
               : 'px-4 py-6 sm:px-6 lg:px-8 lg:pt-20' // top padding clears floating bar
@@ -368,7 +429,7 @@ export default function Root() {
         >
           <Outlet />
         </div>
-      </main>
+      </motion.main>
     </div>
   );
 }
