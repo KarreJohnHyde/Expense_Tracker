@@ -1,21 +1,35 @@
 import { createBrowserRouter, Navigate } from "react-router";
-import Dashboard from "./pages/Dashboard";
-import Analytics from "./pages/Analytics";
-import Budgets from "./pages/Budgets";
-import Settings from "./pages/Settings";
-import Profile from "./pages/Profile";
-import StockMarket from "./pages/StockMarket";
-import CurrencyTrading from "./pages/CurrencyTrading";
-import CryptoMarket from "./pages/CryptoMarket";
-import ScanReceipt from "./pages/ScanReceipt";
-import WalletTracker from "./pages/WalletTracker";
-import SMSParser from "./pages/SMSParser";
-import QRGenerator from "./pages/QRGenerator";
-import Webhooks from "./pages/Webhooks";
-import Login from "./pages/Login";
+import { Suspense, lazy } from "react";
 import Root from "./pages/Root";
-import Gallery from "./pages/Gallery";
 import { auth } from "./lib/auth";
+
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Analytics = lazy(() => import("./pages/Analytics"));
+const Budgets = lazy(() => import("./pages/Budgets"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Profile = lazy(() => import("./pages/Profile"));
+const StockMarket = lazy(() => import("./pages/StockMarket"));
+const CurrencyTrading = lazy(() => import("./pages/CurrencyTrading"));
+const CryptoMarket = lazy(() => import("./pages/CryptoMarket"));
+const ScanReceipt = lazy(() => import("./pages/ScanReceipt"));
+const WalletTracker = lazy(() => import("./pages/WalletTracker"));
+const SMSParser = lazy(() => import("./pages/SMSParser"));
+const QRGenerator = lazy(() => import("./pages/QRGenerator"));
+const Webhooks = lazy(() => import("./pages/Webhooks"));
+const Login = lazy(() => import("./pages/Login"));
+const Gallery = lazy(() => import("./pages/Gallery"));
+
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[30vh] items-center justify-center text-sm text-muted-foreground">
+      Loading...
+    </div>
+  );
+}
+
+function withRouteLoader(element: JSX.Element) {
+  return <Suspense fallback={<RouteFallback />}>{element}</Suspense>;
+}
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -29,7 +43,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 export const router = createBrowserRouter([
   {
     path: "/login",
-    Component: Login,
+    element: withRouteLoader(<Login />),
   },
   {
     path: "/",
@@ -39,20 +53,20 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
-      { index: true, Component: Dashboard },
-      { path: "analytics", Component: Analytics },
-      { path: "budgets", Component: Budgets },
-      { path: "stocks", Component: StockMarket },
-      { path: "currency", Component: CurrencyTrading },
-      { path: "crypto", Component: CryptoMarket },
-      { path: "wallets", Component: WalletTracker },
-      { path: "sms-parser", Component: SMSParser },
-      { path: "scan-receipt", Component: ScanReceipt },
-      { path: "gallery", Component: Gallery },
-      { path: "qr-generator", Component: QRGenerator },
-      { path: "automations", Component: Webhooks },
-      { path: "profile", Component: Profile },
-      { path: "settings", Component: Settings },
+      { index: true, element: withRouteLoader(<Dashboard />) },
+      { path: "analytics", element: withRouteLoader(<Analytics />) },
+      { path: "budgets", element: withRouteLoader(<Budgets />) },
+      { path: "stocks", element: withRouteLoader(<StockMarket />) },
+      { path: "currency", element: withRouteLoader(<CurrencyTrading />) },
+      { path: "crypto", element: withRouteLoader(<CryptoMarket />) },
+      { path: "wallets", element: withRouteLoader(<WalletTracker />) },
+      { path: "sms-parser", element: withRouteLoader(<SMSParser />) },
+      { path: "scan-receipt", element: withRouteLoader(<ScanReceipt />) },
+      { path: "gallery", element: withRouteLoader(<Gallery />) },
+      { path: "qr-generator", element: withRouteLoader(<QRGenerator />) },
+      { path: "automations", element: withRouteLoader(<Webhooks />) },
+      { path: "profile", element: withRouteLoader(<Profile />) },
+      { path: "settings", element: withRouteLoader(<Settings />) },
     ],
   },
 ]);

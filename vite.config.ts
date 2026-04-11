@@ -54,4 +54,36 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+  build: {
+    rollupOptions: {
+      output: {
+        // Split heavy dependencies so initial route payload stays smaller.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+
+          if (id.includes('tesseract.js') || id.includes('@tensorflow') || id.includes('html5-qrcode')) {
+            return 'vendor-ml';
+          }
+          if (id.includes('@mui') || id.includes('@emotion')) {
+            return 'vendor-mui';
+          }
+          if (id.includes('@radix-ui')) {
+            return 'vendor-radix';
+          }
+          if (id.includes('react-dnd')) {
+            return 'vendor-dnd';
+          }
+          if (id.includes('recharts')) {
+            return 'vendor-charts';
+          }
+          if (id.includes('@supabase')) {
+            return 'vendor-supabase';
+          }
+          if (id.includes('react-router')) {
+            return 'vendor-router';
+          }
+        },
+      },
+    },
+  },
 })
