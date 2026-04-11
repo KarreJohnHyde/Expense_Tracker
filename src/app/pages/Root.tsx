@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Webhook,
   Search,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useState, useEffect, useRef } from 'react';
@@ -30,6 +31,8 @@ import { auth } from '../lib/auth';
 import { toast } from 'sonner';
 import { NotificationsPanel } from '../components/NotificationsPanel';
 import { runNotificationEngine } from '../lib/notifications';
+import { LiveTime } from '../components/LiveTime';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 const navigation = [
   { name: 'Dashboard',       href: '/',             icon: LayoutDashboard },
@@ -41,6 +44,7 @@ const navigation = [
   { name: 'UPI Wallets',     href: '/wallets',      icon: Smartphone },
   { name: 'Bank SMS',        href: '/sms-parser',   icon: MessageSquare },
   { name: 'Scan Receipt',    href: '/scan-receipt', icon: ScanLine },
+  { name: 'Gallery',         href: '/gallery',      icon: ImageIcon },
   { name: 'QR Generator',    href: '/qr-generator', icon: QrCode },
   { name: 'Automations',     href: '/automations',  icon: Webhook },
   { name: 'Profile',         href: '/profile',      icon: User },
@@ -146,10 +150,16 @@ export default function Root() {
             )}
 
             {isSidebarOpen && !isTouchLayout && (
-              <div className="shrink-0">
+              <div className="flex flex-col items-center gap-3 shrink-0">
                 <NotificationsPanel />
+                <ThemeToggle />
               </div>
             )}
+          </div>
+
+          {/* Live Time - Advanced Dashboard Feel */}
+          <div className={cn("px-4 py-3", !isSidebarOpen && "flex justify-center px-2")}>
+            <LiveTime showIcon={isSidebarOpen} className={!isSidebarOpen ? "p-1.5" : ""} />
           </div>
 
           {/* Collapse toggle */}
@@ -282,6 +292,7 @@ export default function Root() {
 
           {/* Right controls */}
           <div className="flex items-center gap-1.5">
+            <ThemeToggle />
             {isTouchLayout && <NotificationsPanel />}
             <Button
               variant="ghost"
@@ -333,6 +344,7 @@ export default function Root() {
         >
           <FloatingSearchBar />
           <div className="flex items-center gap-2 shrink-0">
+            <ThemeToggle />
             <NotificationsPanel />
           </div>
         </div>

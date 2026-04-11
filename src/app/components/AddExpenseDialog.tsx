@@ -10,6 +10,7 @@ import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { Badge } from './ui/badge';
 import { useCurrency } from '../lib/currency';
+import { classifyExpense } from '../lib/classifier';
 
 const CATEGORIES = [
   'Food & Dining',
@@ -173,11 +174,12 @@ export function AddExpenseDialog({
     if (!formData.description) return;
     setAiLoading(true);
     try {
-      const amountVal = parseFloat(formData.amount) || 0;
-      const result = await api.categorizeExpense(formData.description, convertToBase(amountVal));
+      // Use local client-side classifier as requested
+      const result = classifyExpense(formData.description);
       setAiSuggestion(result);
     } catch {
       // Silent fail
+      setAiSuggestion({ category: 'Others', confidence: 0 });
     } finally {
       setAiLoading(false);
     }

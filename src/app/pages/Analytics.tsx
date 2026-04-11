@@ -40,6 +40,8 @@ export default function Analytics() {
 
   useEffect(() => {
     loadAnalytics();
+    window.addEventListener('expenseai:edge:expenses_updated', loadAnalytics);
+    return () => window.removeEventListener('expenseai:edge:expenses_updated', loadAnalytics);
   }, []);
 
   const loadAnalytics = async () => {

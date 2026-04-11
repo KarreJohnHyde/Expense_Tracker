@@ -14,6 +14,7 @@ import QRGenerator from "./pages/QRGenerator";
 import Webhooks from "./pages/Webhooks";
 import Login from "./pages/Login";
 import Root from "./pages/Root";
+import Gallery from "./pages/Gallery";
 import { auth } from "./lib/auth";
 
 // Protected route wrapper
@@ -47,6 +48,7 @@ export const router = createBrowserRouter([
       { path: "wallets", Component: WalletTracker },
       { path: "sms-parser", Component: SMSParser },
       { path: "scan-receipt", Component: ScanReceipt },
+      { path: "gallery", Component: Gallery },
       { path: "qr-generator", Component: QRGenerator },
       { path: "automations", Component: Webhooks },
       { path: "profile", Component: Profile },

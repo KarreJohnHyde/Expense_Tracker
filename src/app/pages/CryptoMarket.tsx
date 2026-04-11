@@ -23,6 +23,8 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { useCurrency } from '../lib/currency';
 import { fetchQuotes, fetchTimeSeries, getMarketStatus } from '../lib/marketData';
 import { CryptoPrediction } from '../components/CryptoPrediction';
+import { api } from '../lib/api';
+
 
 interface Crypto {
   id: string;
@@ -242,6 +244,17 @@ export default function CryptoMarket() {
         },
       ]);
     }
+    
+    // EDGE PIPELINE
+    const value = selectedCrypto.price * tradeQuantity;
+    api.addExpense({
+      description: `Bought ${tradeQuantity} ${selectedCrypto.symbol}`,
+      amount: value,
+      category: 'Investments',
+      date: new Date().toISOString().split('T')[0],
+      paymentMethod: 'UPI'
+    }).catch(console.error);
+
     toast.success(`Bought ${tradeQuantity} ${selectedCrypto.symbol} at ${formatCurrency(selectedCrypto.price)}`);
     setTradeDialogOpen(false);
     setTradeQuantity(1);
@@ -269,7 +282,19 @@ export default function CryptoMarket() {
         )
       );
     }
+    
+    const value = selectedCrypto.price * tradeQuantity;
     const profit = (selectedCrypto.price - position.buyPrice) * tradeQuantity;
+    
+    // EDGE PIPELINE (Sell acts as negative expense / income)
+    api.addExpense({
+      description: `Sold ${tradeQuantity} ${selectedCrypto.symbol}`,
+      amount: -value,
+      category: 'Investments',
+      date: new Date().toISOString().split('T')[0],
+      paymentMethod: 'Net Banking'
+    }).catch(console.error);
+
     toast.success(`Sold ${tradeQuantity} ${selectedCrypto.symbol} at ${formatCurrency(selectedCrypto.price)}. P&L: ${formatCurrency(profit)}`);
     setTradeDialogOpen(false);
     setTradeQuantity(1);

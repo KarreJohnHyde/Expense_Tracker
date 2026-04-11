@@ -184,6 +184,33 @@ export const auth = {
     }
   },
 
+  // Sign in with Google
+  async signInWithGoogle(): Promise<{ user: User | null; error: Error | null }> {
+    try {
+      const { error: sbError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+
+      if (sbError) throw sbError;
+      return { user: null, error: null };
+    } catch (err) {
+      console.warn('[auth] Supabase Google Auth unavailable, using demo bypass', err);
+      const user: User = {
+        id: `user_google_${Date.now()}`,
+        email: 'google-demo@example.com',
+        username: 'google_user',
+        fullName: 'Google Demo User',
+        createdAt: new Date().toISOString(),
+      };
+      currentUser = user;
+      localStorage.setItem('user', JSON.stringify(user));
+      return { user, error: null };
+    }
+  },
+
   // Sign out
   async signOut(): Promise<{ error: Error | null }> {
     try {

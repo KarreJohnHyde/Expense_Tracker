@@ -1,0 +1,41 @@
+name: mobile_app
+description: An AI-Powered Mobile Expense Tracker
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # State Management & Services
+  provider: ^6.1.1
+  shared_preferences: ^2.2.2
+  sqflite: ^2.3.0
+  path_provider: ^2.1.2
+  
+  # UI & Animations
+  cupertino_icons: ^1.0.6
+  fl_chart: ^0.66.0
+  flutter_animate: ^4.5.0 # For advanced edge animations
+  google_fonts: ^6.1.0
+  intl: ^0.19.0
+  lucide_icons: ^1.0.0
+  flutter_staggered_animations: ^1.1.1
+
+  # Native APIs
+  speech_to_text: ^6.5.1
+  image_picker: ^1.0.7
+  google_mlkit_text_recognition: ^0.12.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

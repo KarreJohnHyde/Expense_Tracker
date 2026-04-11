@@ -21,6 +21,7 @@ import {
 import { api } from '../lib/api';
 import { useCurrency } from '../lib/currency';
 import { notifyUser } from '../lib/notifications';
+import { classifyExpense } from '../lib/classifier';
 
 const CATEGORIES = [
   'Food & Dining',
@@ -166,21 +167,26 @@ export default function ScanReceipt() {
       }
     }
     
-    // Guess category based on keywords
-    let category = 'Others';
+    // Guess category using local ML classifier
+    const mlResult = classifyExpense(text);
+    let category = mlResult.category;
     const textLower = text.toLowerCase();
-    if (textLower.includes('restaurant') || textLower.includes('cafe') || textLower.includes('food')) {
-      category = 'Food & Dining';
-    } else if (textLower.includes('uber') || textLower.includes('taxi') || textLower.includes('transport')) {
-      category = 'Transportation';
-    } else if (textLower.includes('shop') || textLower.includes('store') || textLower.includes('market')) {
-      category = 'Shopping';
-    } else if (textLower.includes('electric') || textLower.includes('water') || textLower.includes('utility')) {
-      category = 'Bills & Utilities';
-    } else if (textLower.includes('movie') || textLower.includes('entertainment') || textLower.includes('ticket')) {
-      category = 'Entertainment';
-    } else if (textLower.includes('hospital') || textLower.includes('pharmacy') || textLower.includes('medical')) {
-      category = 'Healthcare';
+    
+    // Fallback if confidence is low, though classifyExpense handles it
+    if (category === 'Others' || mlResult.confidence < 0.3) {
+      if (textLower.includes('restaurant') || textLower.includes('cafe') || textLower.includes('food')) {
+        category = 'Food & Dining';
+      } else if (textLower.includes('uber') || textLower.includes('taxi') || textLower.includes('transport')) {
+        category = 'Transportation';
+      } else if (textLower.includes('shop') || textLower.includes('store') || textLower.includes('market')) {
+        category = 'Shopping';
+      } else if (textLower.includes('electric') || textLower.includes('water') || textLower.includes('utility')) {
+        category = 'Bills & Utilities';
+      } else if (textLower.includes('movie') || textLower.includes('entertainment') || textLower.includes('ticket')) {
+        category = 'Entertainment';
+      } else if (textLower.includes('hospital') || textLower.includes('pharmacy') || textLower.includes('medical')) {
+        category = 'Healthcare';
+      }
     }
     
     // Guess payment method

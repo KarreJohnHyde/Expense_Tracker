@@ -43,6 +43,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadExpenses();
+    window.addEventListener('expenseai:edge:expenses_updated', loadExpenses);
+    return () => window.removeEventListener('expenseai:edge:expenses_updated', loadExpenses);
   }, []);
 
   useEffect(() => {

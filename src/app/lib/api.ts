@@ -111,90 +111,197 @@ function generateDemoPredictions() {
   };
 }
 
-// ── API Helpers ────────────────────────────────────────────────────────
-async function apiCall(endpoint: string, options: RequestInit = {}) {
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
+// ── Simulated Edge Operations (Local Storage Backed) ────────────────────
+const STORAGE_KEYS = {
+  EXPENSES: 'expenseai_expenses',
+  BUDGETS: 'expenseai_budgets'
+};
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || `HTTP error! status: ${response.status}`);
-  }
-
-  return response.json();
+function getLocalExpenses(): Expense[] {
+  const data = localStorage.getItem(STORAGE_KEYS.EXPENSES);
+  if (data) return JSON.parse(data);
+  const demo = generateDemoExpenses();
+  localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(demo));
+  return demo;
 }
 
-/** Wraps an api call so that network / server failures fall back to demo data. */
-async function safeApiCall<T>(endpoint: string, options: RequestInit | undefined, fallback: T): Promise<T> {
-  try {
-    return await apiCall(endpoint, options);
-  } catch {
-    console.warn(`[api] ${endpoint} failed – using demo data`);
-    return fallback;
-  }
+function saveLocalExpenses(expenses: Expense[]) {
+  localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
+  // Simulate an edge event trigger
+  window.dispatchEvent(new Event('expenseai:edge:expenses_updated'));
+}
+
+function getLocalBudgets(): Budget[] {
+  const data = localStorage.getItem(STORAGE_KEYS.BUDGETS);
+  if (data) return JSON.parse(data);
+  const demo = generateDemoBudgets();
+  localStorage.setItem(STORAGE_KEYS.BUDGETS, JSON.stringify(demo));
+  return demo;
+}
+
+function saveLocalBudgets(budgets: Budget[]) {
+  localStorage.setItem(STORAGE_KEYS.BUDGETS, JSON.stringify(budgets));
+  window.dispatchEvent(new Event('expenseai:edge:budgets_updated'));
 }
 
 export const api = {
-  // Expenses
-  getExpenses: () =>
-    safeApiCall('/expenses', undefined, { expenses: generateDemoExpenses() }),
-  addExpense: (expense: Omit<Expense, 'id'>) => apiCall('/expenses', {
-    method: 'POST',
-    body: JSON.stringify(expense),
-  }),
-  updateExpense: (id: string, expense: Partial<Expense>) => apiCall(`/expenses/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(expense),
-  }),
-  deleteExpense: (id: string) => apiCall(`/expenses/${id}`, {
-    method: 'DELETE',
-  }),
+  // Expenses (Simulated Edge)
+  getExpenses: async () => ({ expenses: getLocalExpenses() }),
+  addExpense: async (expense: Omit<Expense, 'id'>) => {
+    const expenses = getLocalExpenses();
+    const newExpense = { ...expense, id: `exp_${Date.now()}` };
+    saveLocalExpenses([newExpense, ...expenses]);
+    return newExpense;
+  },
+  updateExpense: async (id: string, updates: Partial<Expense>) => {
+    const expenses = getLocalExpenses();
+    const idx = expenses.findIndex(e => e.id === id);
+    if (idx > -1) {
+      expenses[idx] = { ...expenses[idx], ...updates };
+      saveLocalExpenses(expenses);
+      return expenses[idx];
+    }
+    throw new Error('Expense not found');
+  },
+  deleteExpense: async (id: string) => {
+    const expenses = getLocalExpenses();
+    saveLocalExpenses(expenses.filter(e => e.id !== id));
+    return { success: true };
+  },
 
-  // Budgets
-  getBudgets: () =>
-    safeApiCall('/budgets', undefined, { budgets: generateDemoBudgets() }),
-  setBudget: (budget: Omit<Budget, 'id'>) => apiCall('/budgets', {
-    method: 'POST',
-    body: JSON.stringify(budget),
-  }),
-  updateBudget: (id: string, budget: Partial<Budget>) => apiCall(`/budgets/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(budget),
-  }),
-  deleteBudget: (id: string) => apiCall(`/budgets/${id}`, {
-    method: 'DELETE',
-  }),
-  clearAllBudgets: () => apiCall('/budgets/clear', {
-    method: 'DELETE',
-  }),
+  // Budgets (Simulated Edge)
+  getBudgets: async () => ({ budgets: getLocalBudgets() }),
+  setBudget: async (budget: Omit<Budget, 'id'>) => {
+    const budgets = getLocalBudgets();
+    const newBudget = { ...budget, id: `bud_${Date.now()}` };
+    saveLocalBudgets([...budgets, newBudget]);
+    return newBudget;
+  },
+  updateBudget: async (id: string, updates: Partial<Budget>) => {
+    const budgets = getLocalBudgets();
+    const idx = budgets.findIndex(b => b.id === id);
+    if (idx > -1) {
+      budgets[idx] = { ...budgets[idx], ...updates };
+      saveLocalBudgets(budgets);
+      return budgets[idx];
+    }
+    throw new Error('Budget not found');
+  },
+  deleteBudget: async (id: string) => {
+    const budgets = getLocalBudgets();
+    saveLocalBudgets(budgets.filter(b => b.id !== id));
+    return { success: true };
+  },
+  clearAllBudgets: async () => {
+    saveLocalBudgets([]);
+    return { success: true };
+  },
 
-  // AI/ML
-  categorizeExpense: (description: string, amount: number) =>
-    safeApiCall('/ai/categorize', {
-      method: 'POST',
-      body: JSON.stringify({ description, amount }),
-    }, { category: 'Others', confidence: 0.5 }),
-  getPredictions: () =>
-    safeApiCall('/ai/predictions', undefined, generateDemoPredictions()),
-  getInsights: () =>
-    safeApiCall('/ai/insights', undefined, generateDemoInsights()),
-  processReceipt: (imageData: string) => apiCall('/ai/ocr', {
-    method: 'POST',
-    body: JSON.stringify({ imageData }),
-  }),
+  // AI/ML (Fallback to Demo/Local logic as these run purely client-side or mocked now)
+  categorizeExpense: async (description: string, amount: number) => ({ category: 'Others', confidence: 0.5 }), // Substituted by our local classifier.ts where needed
+  getPredictions: async () => {
+    const expenses = getLocalExpenses();
+    const total = expenses.reduce((sum, e) => sum + e.amount, 0);
+    const dailyAverage = expenses.length > 0 ? total / expenses.length : 0;
+    return {
+      predictions: {
+        currentMonthSpending: total,
+        predictedMonthEnd: total + (dailyAverage * 10), // arbitrary forecast
+        dailyAverage: Math.round(dailyAverage),
+        recommendedDailyBudget: Math.max(100, Math.round(total / 30 * 0.8))
+      }
+    };
+  },
+  getInsights: async () => {
+    const expenses = getLocalExpenses();
+    if (expenses.length === 0) return { insights: [] };
+    
+    const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+    const insights: any[] = [];
+    
+    // Analyze specific trends dynamically
+    const catMap: Record<string, number> = {};
+    expenses.forEach(e => { catMap[e.category] = (catMap[e.category] || 0) + e.amount; });
+    const sortedCats = Object.entries(catMap).sort((a,b) => b[1] - a[1]);
+    
+    if (sortedCats.length > 0) {
+      const highestCat = sortedCats[0];
+      const percent = Math.round((highestCat[1] / totalExpenses) * 100);
+      if (percent > 40) {
+        insights.push({
+          type: 'warning',
+          title: `High ${highestCat[0]} Spending`,
+          message: `Your ${highestCat[0].toLowerCase()} make up ${percent}% of your total spending. Consider creating a budget.`,
+          category: highestCat[0],
+          amount: highestCat[1],
+          potentialSavings: Math.round(highestCat[1] * 0.1)
+        });
+      }
+    }
+    
+    // Check recurring expenses heuristic (multiple same amounts in similar descriptions)
+    let possibleSubSavings = 0;
+    expenses.filter(e => e.category === 'Entertainment' || e.description.toLowerCase().includes('subscription')).forEach(e => {
+        possibleSubSavings += e.amount * 0.2; // Guess 20% can be cut
+    });
+    
+    if (possibleSubSavings > 0) {
+        insights.push({
+          type: 'saving',
+          title: 'Subscription & Entertainment Audit',
+          message: 'You have several entertainment or subscription expenses. Review them to see if you can cancel unused ones.',
+          potentialSavings: Math.round(possibleSubSavings)
+        });
+    }
 
-  // Analytics
-  getAnalytics: () =>
-    safeApiCall('/analytics', undefined, {
-      totalExpenses: 22826,
-      monthlyAverage: 19500,
-      topCategory: 'Food & Dining',
-      transactionCount: 20,
-    }),
-  exportData: () => apiCall('/export'),
+    insights.push({
+        type: 'success',
+        title: 'Edge AI Active',
+        message: 'Your spending patterns are now being analyzed locally in real-time. Add more expenses to get deeper insights.'
+    });
+
+    return { insights };
+  },
+  processReceipt: async (imageData: string) => {
+    // OCR logic moved mostly to client side tesseract, this is a fallback mock
+    return { text: "Scan successful" }; 
+  },
+
+  // Analytics (Dynamic calculation based on local edge data)
+  getAnalytics: async () => {
+    const expenses = getLocalExpenses();
+    const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+    const averageExpense = expenses.length > 0 ? totalExpenses / expenses.length : 0;
+    
+    // Build Category Breakdown
+    const catMap: Record<string, number> = {};
+    expenses.forEach(e => {
+        catMap[e.category] = (catMap[e.category] || 0) + e.amount;
+    });
+    const categoryBreakdown = Object.entries(catMap)
+      .map(([category, amount]) => ({ category, amount, percentage: (amount / totalExpenses) * 100 }))
+      .sort((a,b) => b.amount - a.amount);
+      
+    // Build Payment Method Breakdown
+    const payMap: Record<string, number> = {};
+    expenses.forEach(e => {
+        const method = e.paymentMethod || 'Unknown';
+        payMap[method] = (payMap[method] || 0) + e.amount;
+    });
+    const paymentMethodBreakdown = Object.entries(payMap)
+      .map(([method, amount]) => ({ method, amount, percentage: (amount / totalExpenses) * 100 }))
+      .sort((a,b) => b.amount - a.amount);
+
+    return {
+      totalMonthly: totalExpenses, // roughly
+      totalExpenses: expenses.length,
+      averageExpense,
+      topCategory: categoryBreakdown.length > 0 ? categoryBreakdown[0].category : 'Unknown',
+      transactionCount: expenses.length,
+      categoryBreakdown,
+      paymentMethodBreakdown,
+    };
+  },
+  
+  exportData: async () => ({ success: true, data: getLocalExpenses() }),
 };

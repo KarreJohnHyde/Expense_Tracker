@@ -24,6 +24,7 @@ import { AdvancedStockChart } from '../components/AdvancedStockChart';
 import { StockPrediction } from '../components/StockPrediction';
 import { useCurrency } from '../lib/currency';
 import { fetchQuotes, fetchTimeSeries, getMarketStatus } from '../lib/marketData';
+import { api } from '../lib/api';
 
 interface Stock {
   id: string;
@@ -268,6 +269,16 @@ export default function StockMarket() {
         },
       ]);
     }
+    
+    // EDGE PIPELINE
+    const value = selectedStock.price * tradeQuantity;
+    api.addExpense({
+      description: `Bought ${tradeQuantity} shares of ${selectedStock.symbol}`,
+      amount: value,
+      category: 'Investments',
+      date: new Date().toISOString().split('T')[0],
+      paymentMethod: 'Net Banking'
+    }).catch(console.error);
 
     toast.success(`Bought ${tradeQuantity} shares of ${selectedStock.symbol} at ${formatCurrency(selectedStock.price)}`);
     setTradeDialogOpen(false);
@@ -299,8 +310,19 @@ export default function StockMarket() {
         )
       );
     }
-
+    
+    const value = selectedStock.price * tradeQuantity;
     const profit = (selectedStock.price - position.buyPrice) * tradeQuantity;
+
+    // EDGE PIPELINE
+    api.addExpense({
+      description: `Sold ${tradeQuantity} shares of ${selectedStock.symbol}`,
+      amount: -value,
+      category: 'Investments',
+      date: new Date().toISOString().split('T')[0],
+      paymentMethod: 'Net Banking'
+    }).catch(console.error);
+
     toast.success(`Sold ${tradeQuantity} shares of ${selectedStock.symbol} at ${formatCurrency(selectedStock.price)}. P&L: ${formatCurrency(profit)}`);
     setTradeDialogOpen(false);
     setTradeQuantity(1);

@@ -31,6 +31,8 @@ export function AIInsights() {
 
   useEffect(() => {
     loadInsights();
+    window.addEventListener('expenseai:edge:expenses_updated', loadInsights);
+    return () => window.removeEventListener('expenseai:edge:expenses_updated', loadInsights);
   }, []);
 
   const loadInsights = async () => {

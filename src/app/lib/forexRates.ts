@@ -3,6 +3,7 @@
  * Fetches real exchange rates from ExchangeRate-API and computes forex pairs.
  */
 import { fetchQuotes, getMarketStatus } from './marketData';
+import { api } from './api';
 
 export interface ForexPair {
   id: string;
@@ -254,17 +255,14 @@ export function autoRecordTrade(trade: {
   trades.unshift(tradeEntry);
   localStorage.setItem(TRADES_KEY, JSON.stringify(trades.slice(0, 100)));
 
-  // Also save as an expense
-  const expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
-  expenses.unshift({
-    id: crypto.randomUUID(),
+  // EDGE PIPELINE
+  api.addExpense({
     description: `Forex ${trade.type.toUpperCase()}: ${trade.pair} @ ${trade.rate.toFixed(4)}`,
-    amount: trade.amount,
-    category: 'Trading',
+    amount: trade.type === 'buy' ? trade.amount : -trade.amount,
+    category: 'Investments',
     date: trade.date,
     paymentMethod: 'Forex Trading',
-  });
-  localStorage.setItem('expenses', JSON.stringify(expenses));
+  }).catch(console.error);
 
   return tradeEntry;
 }
