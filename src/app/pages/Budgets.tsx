@@ -8,7 +8,7 @@ import { Progress } from '../components/ui/progress';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
-import { Plus, Target, AlertTriangle, CheckCircle, Edit, Trash2 } from 'lucide-react';
+import { Plus, Target, AlertTriangle, CheckCircle, Edit, Trash2, Camera } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
 import { useCurrency } from '../lib/currency';
 import { Budget, Expense } from '../lib/api';
@@ -116,6 +116,21 @@ export default function Budgets() {
 
     // Budgets track outgoing spend; negative values are inflow/refund/trade exits.
     return categoryExpenses.reduce((sum, e) => sum + (e.amount > 0 ? e.amount : 0), 0);
+  };
+
+  const countScannedExpenses = (category: string) => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    return expenses.filter(e => {
+      const expenseDate = new Date(e.date);
+      return (
+        e.category === category &&
+        expenseDate.getMonth() === currentMonth &&
+        expenseDate.getFullYear() === currentYear &&
+        e.source && ['receipt_scan', 'qr_scan', 'barcode_scan'].includes(e.source)
+      );
+    }).length;
   };
 
   const getBudgetStatus = (spent: number, budget: number) => {
@@ -251,6 +266,7 @@ export default function Budgets() {
         ) : (
           budgets.map((budget) => {
             const spent = calculateSpending(budget.category);
+            const scannedCount = countScannedExpenses(budget.category);
             const percentage = Math.min((spent / budget.amount) * 100, 100);
             const remaining = Math.max(budget.amount - spent, 0);
             const status = getBudgetStatus(spent, budget.amount);
@@ -294,6 +310,13 @@ export default function Budgets() {
                       </span>
                     </div>
                   </div>
+
+                  {scannedCount > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-teal-500 pt-1">
+                      <Camera className="size-3.5" />
+                      <span>{scannedCount} from scans</span>
+                    </div>
+                  )}
 
                   {percentage >= 80 && (
                     <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-200 dark:border-orange-800">

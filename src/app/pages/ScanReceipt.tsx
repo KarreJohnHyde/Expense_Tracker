@@ -35,6 +35,9 @@ import {
   Zap,
   Crop,
   Wand2,
+  BarChart3,
+  Target,
+  LayoutDashboard,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useCurrency } from '../lib/currency';
@@ -974,15 +977,26 @@ export default function ScanReceipt() {
                   </div>
                   <h3 className="text-xl font-bold mb-1">Expense Saved Successfully!</h3>
                   <p className="text-muted-foreground mb-6">
-                    Your receipt has been saved and is now visible in the Gallery.
+                    Your receipt has been saved and linked to your Dashboard, Analytics & Budgets.
                   </p>
-                  <div className="flex gap-3">
-                    <Button onClick={() => navigate('/gallery')} className="gap-2">
-                      <ImageIcon className="size-4" />
-                      View in Gallery
-                      <ArrowRight className="size-4" />
+                  <div className="flex gap-3 flex-wrap justify-center">
+                    <Button onClick={() => navigate('/')} className="gap-2">
+                      <LayoutDashboard className="size-4" />
+                      Dashboard
                     </Button>
-                    <Button variant="outline" onClick={handleScanAnother} className="gap-2">
+                    <Button variant="outline" onClick={() => navigate('/analytics')} className="gap-2">
+                      <BarChart3 className="size-4" />
+                      Analytics
+                    </Button>
+                    <Button variant="outline" onClick={() => navigate('/budgets')} className="gap-2">
+                      <Target className="size-4" />
+                      Budgets
+                    </Button>
+                    <Button variant="outline" onClick={() => navigate('/gallery')} className="gap-2">
+                      <ImageIcon className="size-4" />
+                      Gallery
+                    </Button>
+                    <Button variant="ghost" onClick={handleScanAnother} className="gap-2">
                       <Scan className="size-4" />
                       Scan Another
                     </Button>
@@ -1032,6 +1046,11 @@ export default function ScanReceipt() {
                                 <span>{result.extractedInfo.category || 'Others'}</span>
                                 <span>{formatDisplayDate(result.extractedInfo.date)}</span>
                               </div>
+                              {result.ocrText && (
+                                <div className="mt-1 text-[10px] font-mono text-slate-500 line-clamp-2 leading-tight">
+                                  {result.ocrText.split('\n').filter(l => l.trim()).slice(0, 3).join(' · ')}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </button>
@@ -1102,17 +1121,22 @@ export default function ScanReceipt() {
                   </CardContent>
                 </Card>
 
-                {/* Extracted Text Panel */}
-                {ocrText && (
+                {/* Extracted Text Panel — OCR receipts AND QR/barcode decoded text */}
+                {(ocrText || scanMetadata?.rawText) && (
                   <Card className="border-border/50">
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <CardTitle className="flex items-center gap-2 text-base">
                           <AlignLeft className="size-5 text-cyan-400" />
-                          Extracted Text
+                          {scanMetadata?.type === 'qr' ? 'QR Code Data' : scanMetadata?.type === 'barcode' ? 'Barcode Data' : 'Raw OCR Text'}
                           <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 font-normal">
-                            {ocrText.split('\n').filter(l => l.trim()).length} lines
+                            {(ocrText || scanMetadata?.rawText || '').split('\n').filter(l => l.trim()).length} lines
                           </span>
+                          {scanMetadata?.type && scanMetadata.type !== 'ocr_receipt' && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 font-normal">
+                              {scanMetadata.type === 'qr' ? '🔍 QR' : '📊 Barcode'}
+                            </span>
+                          )}
                         </CardTitle>
                         <Button
                           variant="ghost"
@@ -1132,7 +1156,7 @@ export default function ScanReceipt() {
                         }`}
                       >
                         <div className="p-3 overflow-y-auto max-h-[500px]">
-                          {ocrText.split('\n').filter(l => l.trim()).map((line, i) => {
+                          {(ocrText || scanMetadata?.rawText || '').split('\n').filter(l => l.trim()).map((line, i) => {
                             // Highlight lines with amounts
                             const hasAmount = /[0-9,]+\.\d{2}/.test(line) || /(?:₹|rs\.?|\$)\s*[0-9]/i.test(line);
                             const isTotal = /total|amount|sum|payable|balance/i.test(line);

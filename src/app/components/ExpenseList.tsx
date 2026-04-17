@@ -3,9 +3,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { 
   ShoppingBag, Utensils, Car, Zap, Film, Heart, BookOpen, PiggyBank, Plane,
-  Trash2, Edit 
+  Trash2, Edit, Camera, QrCode, Barcode, Eye, FileText 
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { api } from '../lib/api';
@@ -21,7 +22,22 @@ interface Expense {
   date: string;
   paymentMethod?: string;
   tags?: string[];
+  source?: string;
+  scanData?: {
+    type: 'ocr_receipt' | 'qr' | 'barcode';
+    rawText: string;
+    format?: string;
+    capturedAt: string;
+  } | null;
+  receiptImage?: string | null;
 }
+
+const SOURCE_BADGES: Record<string, { label: string; icon: React.ElementType; className: string }> = {
+  receipt_scan: { label: 'Receipt', icon: Camera, className: 'bg-teal-500/10 text-teal-500 border-teal-500/20' },
+  qr_scan: { label: 'QR', icon: QrCode, className: 'bg-violet-500/10 text-violet-500 border-violet-500/20' },
+  barcode_scan: { label: 'Barcode', icon: Barcode, className: 'bg-amber-500/10 text-amber-500 border-amber-500/20' },
+  voice: { label: 'Voice', icon: FileText, className: 'bg-blue-500/10 text-blue-500 border-blue-500/20' },
+};
 
 interface ExpenseListProps {
   expenses: Expense[];
@@ -63,6 +79,7 @@ export function ExpenseList({ expenses, onExpenseDeleted }: ExpenseListProps) {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [lightboxExpense, setLightboxExpense] = useState<Expense | null>(null);
   const { formatCurrency } = useCurrency();
 
   const handleDelete = async (id: string) => {
@@ -128,11 +145,36 @@ export function ExpenseList({ expenses, onExpenseDeleted }: ExpenseListProps) {
                   }`}
                 >
                   <div className="flex items-center gap-4">
-                    <div className={`p-2.5 rounded-xl border ${getCategoryColor(expense.category)} shadow-sm transition-transform group-hover:scale-110 duration-300`}>
-                      <Icon className="size-5" />
-                    </div>
+                    {expense.receiptImage ? (
+                      <button
+                        onClick={() => setLightboxExpense(expense)}
+                        className="relative size-10 rounded-xl border border-border/50 overflow-hidden shadow-sm transition-transform group-hover:scale-110 duration-300 hover:ring-2 hover:ring-primary/40"
+                        title="View receipt & OCR text"
+                      >
+                        <img src={expense.receiptImage} alt="Receipt" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                          <Eye className="size-3.5 text-white" />
+                        </div>
+                      </button>
+                    ) : (
+                      <div className={`p-2.5 rounded-xl border ${getCategoryColor(expense.category)} shadow-sm transition-transform group-hover:scale-110 duration-300`}>
+                        <Icon className="size-5" />
+                      </div>
+                    )}
                     <div className="space-y-1">
-                      <p className="font-semibold text-sm leading-none">{expense.description}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-sm leading-none">{expense.description}</p>
+                        {expense.source && SOURCE_BADGES[expense.source] && (() => {
+                          const badge = SOURCE_BADGES[expense.source!];
+                          const BadgeIcon = badge.icon;
+                          return (
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${badge.className}`}>
+                              <BadgeIcon className="size-2.5" />
+                              {badge.label}
+                            </span>
+                          );
+                        })()}
+                      </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
                         <span className="font-medium bg-muted/50 px-1.5 py-0.5 rounded">{expense.category}</span>
                         <span>•</span>
@@ -197,6 +239,45 @@ export function ExpenseList({ expenses, onExpenseDeleted }: ExpenseListProps) {
           onExpenseUpdated={onExpenseDeleted}
         />
       )}
+
+      {/* Receipt & OCR Lightbox */}
+      <Dialog open={!!lightboxExpense} onOpenChange={(open) => { if (!open) setLightboxExpense(null); }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Camera className="size-5 text-primary" />
+              Receipt Details
+              {lightboxExpense?.source && SOURCE_BADGES[lightboxExpense.source] && (
+                <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${SOURCE_BADGES[lightboxExpense.source].className}`}>
+                  {SOURCE_BADGES[lightboxExpense.source].label}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          {lightboxExpense?.receiptImage && (
+            <img src={lightboxExpense.receiptImage} alt="Receipt" className="w-full rounded-lg border border-border/50" />
+          )}
+          {lightboxExpense?.scanData?.rawText && (
+            <div className="mt-3">
+              <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                <FileText className="size-4 text-cyan-400" />
+                Raw OCR Text
+              </h4>
+              <div className="rounded-lg bg-slate-950/50 border border-slate-800/60 p-3 max-h-60 overflow-y-auto">
+                {lightboxExpense.scanData.rawText.split('\n').filter(l => l.trim()).map((line, i) => (
+                  <div key={i} className="text-xs font-mono py-0.5 text-slate-400 flex gap-2">
+                    <span className="text-slate-600 select-none shrink-0 w-5 text-right">{i + 1}</span>
+                    <span className="break-all">{line}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {!lightboxExpense?.receiptImage && !lightboxExpense?.scanData?.rawText && (
+            <p className="text-sm text-muted-foreground py-4 text-center">No receipt or OCR data available for this expense.</p>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
