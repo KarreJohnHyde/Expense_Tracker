@@ -16,8 +16,15 @@
     "cap:sync:android": "npx cap sync android",
     "cap:open:android": "npx cap open android",
     "cap:copy:android": "npx cap copy android",
+    "cap:add:ios": "npx cap add ios",
+    "cap:sync:ios": "npx cap sync ios",
+    "cap:open:ios": "npx cap open ios",
+    "cap:copy:ios": "npx cap copy ios",
+    "cap:sync": "npx cap sync",
     "android:build:debug": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-android-debug.ps1",
     "android:debug:apk": "pnpm build:native && pnpm cap:sync:android && pnpm android:build:debug",
+    "ios:open": "pnpm build:native && pnpm cap:sync:ios && pnpm cap:open:ios",
+    "mobile:build": "pnpm build:native && npx cap sync",
     "deploy:vercel": "pnpm dlx vercel@latest --prod",
     "tunnel": "node tunnel-dev.js",
     "webhook": "node webhook-server.js"
@@ -25,6 +32,7 @@
   "dependencies": {
     "@capacitor/android": "^8.3.0",
     "@capacitor/core": "^8.3.0",
+    "@capacitor/ios": "8.3.0",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",
     "@mui/icons-material": "7.3.5",
