@@ -25,6 +25,7 @@ import {
   Image as ImageIcon,
   PanelLeftClose,
   PanelLeft,
+  Repeat
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useState, useEffect, useRef } from 'react';
@@ -36,9 +37,13 @@ import { NotificationsPanel } from '../components/NotificationsPanel';
 import { runNotificationEngine } from '../lib/notifications';
 import { LiveTime } from '../components/LiveTime';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { AIVoiceCapture } from '../components/AIVoiceCapture';
+import { AppLock } from '../components/AppLock';
+import { AICFO } from '../components/AICFO';
 
 const navigation = [
   { name: 'Dashboard',       href: '/',             icon: LayoutDashboard },
+  { name: 'Subscriptions',   href: '/subscriptions',icon: Repeat },
   { name: 'Analytics',       href: '/analytics',    icon: TrendingUp },
   { name: 'Budgets',         href: '/budgets',      icon: Wallet },
   { name: 'Stock Market',    href: '/stocks',       icon: LineChart },
@@ -427,6 +432,9 @@ export default function Root() {
           <Outlet />
         </div>
       </motion.main>
+      <AIVoiceCapture />
+      <AICFO />
+      <AppLock />
     </div>
   );
 }

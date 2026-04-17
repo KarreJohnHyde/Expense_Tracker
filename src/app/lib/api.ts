@@ -115,15 +115,21 @@ export const api = {
         return await resp.json();
       }
     } catch {}
-    return { id, ...updates }; // Stub
+    
+    // Fallback: Update local storage directly
+    const current = getLocalExpenses();
+    const updated = current.map((e: Expense) => e.id === id ? { ...e, ...updates } : e);
+    saveLocalExpenses(updated);
+    return { id, ...updates }; 
   },
   
   deleteExpense: async (id: string) => {
     try {
       await fetch(`${PYTHON_API_URL}/expenses/${id}`, { method: 'DELETE' });
     } catch {}
+    // Fallback: Delete from local storage directly
     const expenses = getLocalExpenses();
-    saveLocalExpenses(expenses.filter(e => e.id !== id));
+    saveLocalExpenses(expenses.filter((e: Expense) => e.id !== id));
     return { success: true };
   },
 
@@ -139,7 +145,7 @@ export const api = {
         return await res.json();
       }
     } catch {}
-    return { type: 'ocr_receipt', rawText: "Backend unreachable.", extractedData: null };
+    return { error: true, code: 'fallback', type: 'ocr_receipt', rawText: "Backend unreachable.", extractedData: null };
   },
 
   // ── Mod 2: Image Storage Management to S3 Bucket via Python ──────────
@@ -203,7 +209,51 @@ export const api = {
   updateBudget: async (id: string, updates: any) => ({...updates, id}),
   deleteBudget: async (id: string) => ({success: true}),
   clearAllBudgets: async () => ({success: true}),
-  getInsights: async () => ({ insights: [] }),
+  getInsights: async () => {
+     try {
+       const data = await api.getAnalytics();
+       const insights: any[] = [];
+       if (data.anomalies && data.anomalies.length > 0) {
+          data.anomalies.forEach((a: any) => {
+              insights.push({
+                 type: a.severity?.includes('High') ? 'warning' : 'tip',
+                 title: 'Unsupervised ML Anomaly',
+                 message: `IsolationForest isolated irregular spending of $${a.amount} at ${a.description} on ${a.date}.`,
+                 category: a.category
+              });
+          });
+       } else {
+          insights.push({ type: 'success', title: 'Spending Normalized', message: 'Isolation Forest detected no unusual clustering out of bounds.' });
+       }
+       return { insights };
+     } catch { return { insights: [] }; }
+  },
+  getPredictions: async () => {
+     try {
+       const data = await api.getAnalytics();
+       return {
+          predictions: {
+             currentMonthSpending: data.totalAmount || 0,
+             predictedMonthEnd: ((data.totalAmount || 0) + (data.forecast?.predictedNext7Days || 0)),
+             dailyAverage: data.forecast?.dailyAverage || 0,
+             recommendedDailyBudget: data.forecast?.dailyAverage ? data.forecast.dailyAverage * 0.85 : 0
+          }
+       };
+     } catch { return { predictions: null }; }
+  },
   categorizeExpense: async () => ({ category: 'Others', confidence: 0.5 }),
+  getScans: async () => {
+     const expenses = getLocalExpenses();
+     const scans = expenses
+       .filter(e => e.receiptImage)
+       .map(e => ({
+          id: `scan_${e.id}`,
+          amount: e.amount,
+          date: e.date,
+          description: e.description,
+          imageUrl: e.receiptImage
+       }));
+     return { scans };
+  },
   exportData: async () => ({ success: true, data: getLocalExpenses() }),
 };

@@ -4,6 +4,7 @@ export interface WalletTransaction {
   type: 'credit' | 'debit';
   amount: number;
   description: string;
+  category?: string;
   date: string;
   reference?: string;
 }

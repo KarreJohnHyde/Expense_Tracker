@@ -5,13 +5,15 @@ import { AIInsights } from '../components/AIInsights';
 import { StatsCards } from '../components/StatsCards';
 import { SpendingChart } from '../components/SpendingChart';
 import { VoiceExpenseInput } from '../components/VoiceExpenseInput';
+import { ForecastCard } from '../components/ForecastCard';
+import { SavingsAdvisor } from '../components/SavingsAdvisor';
 import { api } from '../lib/api';
 import { Skeleton } from '../components/ui/skeleton';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Search, FileText, FileSpreadsheet, Sparkles, Calendar, Camera, TrendingUp, Zap, Filter } from 'lucide-react';
+import { Search, FileText, FileSpreadsheet, Sparkles, Calendar, Camera, TrendingUp, Zap, Filter, Repeat, ArrowRight, ShieldCheck } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/card';
 import { auth } from '../lib/auth';
 import { useNavigate } from 'react-router';
@@ -44,6 +46,8 @@ export default function Dashboard() {
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const [voicePrefillData, setVoicePrefillData] = useState<any>(null);
+  const [unconfirmedCount, setUnconfirmedCount] = useState(0);
+  const [trustScore, setTrustScore] = useState(100);
 
   const navigate = useNavigate();
   const user = auth.getCurrentUser();
@@ -63,8 +67,10 @@ export default function Dashboard() {
   const loadExpenses = async () => {
     setLoading(true);
     try {
-      const data = await api.getExpenses();
-      setExpenses(data.expenses || []);
+      const resp = await api.getExpenses();
+      const expensesList = resp.expenses || [];
+      setExpenses(expensesList);
+      checkPotentialSubscriptions(expensesList);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Failed to load expenses';
       toast.error(msg);
@@ -72,6 +78,29 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const checkPotentialSubscriptions = (expenses: Expense[]) => {
+    const subMap: Record<string, number> = {};
+    const SUBSCRIPTION_KEYWORDS = ['netflix', 'spotify', 'prime', 'apple', 'google', 'recharge', 'bill', 'premium', 'plus', 'pro', 'membership', 'sip', 'insurance'];
+    
+    expenses.forEach(e => {
+        const key = e.description?.toLowerCase().trim();
+        if (!key) return;
+        subMap[key] = (subMap[key] || 0) + 1;
+    });
+
+    let potential = 0;
+    for (const [name, count] of Object.entries(subMap)) {
+        const isKeyword = SUBSCRIPTION_KEYWORDS.some(kw => name.includes(kw));
+        const confirmed = localStorage.getItem(`sub_confirmed_${name}`) === 'true';
+        if ((count > 1 || isKeyword) && !confirmed) potential++;
+    }
+    setUnconfirmedCount(potential);
+
+    const verified = expenses.filter(e => e.receiptImage).length;
+    const score = expenses.length > 0 ? (verified / expenses.length) * 100 : 100;
+    setTrustScore(Math.round(score));
   };
 
   const filterExpenses = () => {
@@ -226,6 +255,11 @@ export default function Dashboard() {
                 <Zap className="size-3" />
                 {monthlyTransactions} transactions
               </div>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
+                style={{ background: 'rgba(57,153,255,0.15)', border: '1px solid rgba(57,153,255,0.25)', color: '#3999ff' }}>
+                <ShieldCheck className="size-3" />
+                {trustScore}% Trust Score
+              </div>
             </div>
           </div>
 
@@ -351,6 +385,35 @@ export default function Dashboard() {
           gap: '1.25rem',
         }}
       >
+        {/* Forecasting Row */}
+        <div style={{ gridColumn: 'span 12' }} className="lg:[grid-column:span_6]">
+           <ForecastCard expenses={expenses} />
+        </div>
+        <div style={{ gridColumn: 'span 12' }} className="lg:[grid-column:span_6]">
+           <SavingsAdvisor expenses={expenses} />
+        </div>
+
+        {unconfirmedCount > 0 && (
+           <div 
+             style={{ gridColumn: 'span 12' }} 
+             className="glass-card border-amber-500/30 bg-amber-500/5 p-4 flex items-center justify-between cursor-pointer hover:bg-amber-500/10 transition-colors"
+             onClick={() => navigate('/subscriptions')}
+           >
+              <div className="flex items-center gap-4">
+                 <div className="p-3 rounded-full bg-amber-500/20 text-amber-600">
+                    <Repeat className="size-6" />
+                 </div>
+                 <div>
+                    <p className="font-bold text-amber-900 dark:text-amber-100">Recurring Payments Detected</p>
+                    <p className="text-sm text-amber-700 dark:text-amber-400">AI found {unconfirmedCount} potential subscriptions. Confirm them to improve tracking.</p>
+                 </div>
+              </div>
+              <Button variant="ghost" className="text-amber-600 hover:text-amber-700 hover:bg-transparent">
+                 Review <ArrowRight className="size-4 ml-2" />
+              </Button>
+           </div>
+        )}
+
         {/* Spending Chart — wide */}
         <div
           style={{ gridColumn: 'span 12' }}

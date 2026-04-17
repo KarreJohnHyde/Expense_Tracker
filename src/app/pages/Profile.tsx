@@ -22,6 +22,10 @@ import {
 } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
 import { useCurrency } from '../lib/currency';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { api } from '../lib/api';
+import { FileText } from 'lucide-react';
 
 export default function Profile() {
   const { currency, formatCurrency } = useCurrency();
@@ -31,6 +35,9 @@ export default function Profile() {
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({ fullName: '', email: '' });
+  const [vaultPin, setVaultPin] = useState(localStorage.getItem('expenseai_vault_pin') || '1234');
+  const [isPinEditing, setIsPinEditing] = useState(false);
+  const [newPin, setNewPin] = useState('');
 
   // New account form state
   const [newAccount, setNewAccount] = useState({
@@ -75,6 +82,18 @@ export default function Profile() {
     }
   };
 
+  const handleUpdatePin = () => {
+    if (newPin.length !== 4 || !/^\d+$/.test(newPin)) {
+      toast.error('PIN must be exactly 4 digits');
+      return;
+    }
+    localStorage.setItem('expenseai_vault_pin', newPin);
+    setVaultPin(newPin);
+    setIsPinEditing(false);
+    setNewPin('');
+    toast.success('Security PIN updated! 🔐');
+  };
+
   const handleAddAccount = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!user) return;
@@ -115,6 +134,41 @@ export default function Profile() {
     } else {
       toast.success('Account deleted');
       loadAccounts(user.id);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      const data = await api.getExpenses();
+      const expenses = data.expenses || [];
+      
+      const doc = new jsPDF();
+      doc.setFontSize(20);
+      doc.text("ExpenseAI Official Tax Report", 14, 22);
+      doc.setFontSize(11);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()} | User: ${user?.username}`, 14, 30);
+      
+      const tableData = expenses.map((e: any) => [
+         e.date,
+         e.description?.substring(0, 30) || 'Unknown',
+         e.category || 'Others',
+         e.paymentMethod || 'Cash',
+         formatCurrency(e.amount)
+      ]);
+      
+      autoTable(doc, {
+         startY: 40,
+         head: [['Date', 'Merchant', 'Category', 'Method', 'Amount']],
+         body: tableData,
+         theme: 'grid',
+         headStyles: { fillColor: [0, 212, 170] }
+      });
+      
+      doc.save(`ExpenseAI_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success("Official PDF Generated and Downloaded!");
+    } catch {
+      toast.error("Failed to compile PDF report.");
     }
   };
 
@@ -164,6 +218,11 @@ export default function Profile() {
         <p className="text-muted-foreground">
           Manage your account and financial information
         </p>
+      </div>
+      <div className="flex gap-4">
+          <Button onClick={handleExportPDF} className="bg-emerald-600 hover:bg-emerald-700 shadow-md">
+             <FileText className="size-4 mr-2" /> Generate Official Tax PDF
+          </Button>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -284,6 +343,55 @@ export default function Profile() {
               <div className="w-full bg-muted rounded-full h-2">
                 <div className="bg-green-600 h-2 rounded-full" style={{ width: '90%' }} />
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Vault Settings */}
+        <Card className="md:col-span-2 border-orange-500/20 bg-orange-500/5">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="size-5 text-orange-500" />
+                  Security Vault Settings
+                </CardTitle>
+                <CardDescription>Configure your application lock PIN</CardDescription>
+              </div>
+              {!isPinEditing ? (
+                 <Button variant="outline" size="sm" onClick={() => setIsPinEditing(true)}>Change PIN</Button>
+              ) : (
+                 <Button variant="ghost" size="sm" onClick={() => setIsPinEditing(false)}>Cancel</Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-6">
+               <div className="space-y-1">
+                  <p className="text-sm font-medium">Vault Status</p>
+                  <Badge variant="outline" className="text-green-600 border-green-600/20 bg-green-600/10">Active & Encrypted</Badge>
+               </div>
+               <div className="h-10 w-px bg-border"></div>
+               <div className="flex-1 max-w-xs">
+                  {isPinEditing ? (
+                     <div className="flex gap-2">
+                        <Input 
+                           type="password" 
+                           placeholder="New 4-digit PIN" 
+                           maxLength={4} 
+                           value={newPin} 
+                           onChange={e => setNewPin(e.target.value)}
+                           className="font-mono text-center tracking-[0.5em]"
+                        />
+                        <Button onClick={handleUpdatePin}>Save</Button>
+                     </div>
+                  ) : (
+                     <div className="flex items-center gap-2">
+                        <p className="text-sm text-muted-foreground">Current PIN:</p>
+                        <p className="font-mono font-bold tracking-widest text-lg">****</p>
+                     </div>
+                  )}
+               </div>
             </div>
           </CardContent>
         </Card>

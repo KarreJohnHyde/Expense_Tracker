@@ -59,6 +59,7 @@ export default function SMSParser() {
       wallet: 'Paytm', // default wallet
       type: txn.type,
       amount: txn.amount,
+      category: txn.category || 'Others',
       description: `${txn.bank} - ${txn.type === 'credit' ? 'Credit' : 'Debit'}${txn.accountLast4 ? ` (A/c ${txn.accountLast4})` : ''}`,
       date: txn.date,
       reference: txn.reference,
@@ -82,6 +83,7 @@ export default function SMSParser() {
       wallet,
       type: txn.type,
       amount: txn.amount,
+      category: txn.category || 'Others',
       description: `${txn.bank} - ${txn.type === 'credit' ? 'Credit' : 'Debit'}${txn.accountLast4 ? ` (A/c ${txn.accountLast4})` : ''}`,
       date: txn.date,
       reference: txn.reference,
@@ -220,6 +222,7 @@ Rs.15,000 has been credited to your A/c no. XX3456 by NEFT. Ref: NEFT123456. Avl
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <Badge variant={txn.type === 'credit' ? 'default' : 'destructive'}>{txn.type.toUpperCase()}</Badge>
+                        <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">✨ AI: {txn.category}</Badge>
                         <span className="font-semibold">{txn.bank}</span>
                         {txn.accountLast4 && <span className="text-sm text-muted-foreground">A/c ****{txn.accountLast4}</span>}
                       </div>

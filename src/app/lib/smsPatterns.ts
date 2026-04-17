@@ -1,7 +1,10 @@
+import { classifyExpense } from './classifier';
+
 export interface ParsedTransaction {
   amount: number;
   type: 'credit' | 'debit';
   bank: string;
+  category?: string;
   accountLast4: string;
   date: string;
   balance?: number;
@@ -689,10 +692,14 @@ export function parseBankSMS(message: string): ParsedTransaction | null {
     const merMatch = message.match(MERCHANT_REGEX);
     if (merMatch) merchant = merMatch[1].trim();
 
+    // AI Categorization
+    const classification = classifyExpense(message);
+
     return {
       amount,
       type: pattern.type,
       bank,
+      category: classification.category,
       accountLast4,
       date,
       balance,

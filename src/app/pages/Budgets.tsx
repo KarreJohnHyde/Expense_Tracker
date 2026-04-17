@@ -8,11 +8,12 @@ import { Progress } from '../components/ui/progress';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
-import { Plus, Target, AlertTriangle, CheckCircle, Edit, Trash2, Camera } from 'lucide-react';
+import { Plus, Target, AlertTriangle, CheckCircle, Edit, Trash2, Camera, Sparkles, TrendingUp, Brain } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
 import { useCurrency } from '../lib/currency';
 import { Budget, Expense } from '../lib/api';
 import { EXPENSE_CATEGORIES } from '../lib/expenseSchema';
+import confetti from 'canvas-confetti';
 
 const CATEGORIES = [...EXPENSE_CATEGORIES];
 
@@ -138,6 +139,16 @@ export default function Budgets() {
     if (percentage >= 100) return { status: 'exceeded', color: 'text-red-600', icon: AlertTriangle };
     if (percentage >= 80) return { status: 'warning', color: 'text-orange-600', icon: AlertTriangle };
     return { status: 'good', color: 'text-green-600', icon: CheckCircle };
+  };
+
+  const popConfetti = () => {
+     confetti({
+         particleCount: 150,
+         spread: 70,
+         origin: { y: 0.6 },
+         colors: ['#00D4AA', '#10B981', '#3B82F6', '#FBBF24']
+     });
+     toast.success("Budget Champion! 🏆 Keep saving!");
   };
 
   return (
@@ -272,6 +283,12 @@ export default function Budgets() {
             const status = getBudgetStatus(spent, budget.amount);
             const StatusIcon = status.icon;
 
+            // AI Velocity Calculation
+            const daysPassed = new Date().getDate();
+            const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+            const projectedSpend = (spent / (daysPassed || 1)) * daysInMonth;
+            const needsRevision = projectedSpend > budget.amount && percentage > 40;
+
             return (
               <Card key={budget.id}>
                 <CardHeader>
@@ -286,6 +303,11 @@ export default function Budgets() {
                     <span className={status.color}>
                       {percentage.toFixed(1)}% used
                     </span>
+                    {needsRevision && (
+                      <Badge variant="outline" className="ml-auto text-[10px] bg-amber-500/10 text-amber-600 border-amber-600/20 animate-pulse">
+                        <Sparkles className="size-3 mr-1" /> AI Review Suggested
+                      </Badge>
+                    )}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -310,6 +332,12 @@ export default function Budgets() {
                       </span>
                     </div>
                   </div>
+                  
+                  {status.status === 'good' && percentage > 0 && percentage < 50 && (
+                      <Button variant="secondary" size="sm" className="w-full mt-2 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30" onClick={popConfetti}>
+                         🎉 Claim Under-Budget Reward!
+                      </Button>
+                  )}
 
                   {scannedCount > 0 && (
                     <div className="flex items-center gap-2 text-xs text-teal-500 pt-1">
@@ -325,6 +353,34 @@ export default function Budgets() {
                           ? '⚠️ Budget exceeded! Consider reviewing your spending.'
                           : '⚠️ You\'re nearing your budget limit!'}
                       </p>
+                    </div>
+                  )}
+
+                  {needsRevision && (
+                    <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
+                       <p className="text-xs font-semibold flex items-center gap-2">
+                          <Brain className="size-4 text-primary" /> AI Budget Advisor
+                       </p>
+                       <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          Your current velocity suggests you will hit <span className="text-foreground font-bold">{formatCurrency(projectedSpend)}</span>. 
+                          AI recommends a budget of <span className="text-primary font-bold">{formatCurrency(Math.ceil(projectedSpend / 500) * 500)}</span>.
+                       </p>
+                       <Button 
+                         variant="ghost" 
+                         size="sm" 
+                         className="h-7 text-[10px] w-full bg-primary/10 hover:bg-primary/20 text-primary"
+                         onClick={() => {
+                            setFormData({
+                               category: budget.category,
+                               amount: (Math.ceil(projectedSpend / 500) * 500).toString(),
+                               period: budget.period
+                            });
+                            setEditingBudget(budget);
+                            setOpen(true);
+                         }}
+                       >
+                          Update to recommended limit
+                       </Button>
                     </div>
                   )}
 

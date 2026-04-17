@@ -12,8 +12,9 @@ import {
   Search, Image as ImageIcon, QrCode, FileText, Calendar,
   Barcode, Camera, X, ScanLine, Tag, CreditCard,
   Trash2, ChevronLeft, ChevronRight, ZoomIn, Eye,
-  Download, Plus, Layers, Edit2, Save
+  Download, Plus, Layers, Edit2, Save, Wand2
 } from 'lucide-react';
+import { ImageFilter } from '../components/ImageFilter';
 
 type FilterType = 'all' | 'receipt' | 'qr' | 'barcode';
 
@@ -27,6 +28,8 @@ export default function Gallery() {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [showOcrText, setShowOcrText] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [showFilterOptions, setShowFilterOptions] = useState(false);
   
   const [editForm, setEditForm] = useState<Partial<Expense>>({});
 
@@ -70,6 +73,25 @@ export default function Gallery() {
       toast.success('Deleted successfully');
     } catch {
       toast.error('Failed to delete item.');
+    }
+  };
+
+  const handleApplyFilter = async (filteredImg: string) => {
+    if (!lightboxExpense) return;
+    try {
+      const resp = await fetch(filteredImg);
+      const blob = await resp.blob();
+      const newFile = new File([blob], 'filtered_receipt.jpg', { type: 'image/jpeg' });
+      
+      const uploadResp = await api.uploadImage(newFile, lightboxExpense.id);
+      await api.updateExpense(lightboxExpense.id, { receiptImage: uploadResp.url });
+      
+      setExpenses(prev => prev.map(e => e.id === lightboxExpense.id ? {...e, receiptImage: uploadResp.url} : e));
+      setShowFilterOptions(false);
+      
+      toast.success("Image enhanced and re-synced to cloud!");
+    } catch {
+      toast.error('Failed to sync filtered image');
     }
   };
 
@@ -186,12 +208,17 @@ export default function Gallery() {
 
       {/* Lightbox */}
       {lightboxExpense && lightboxIdx !== null && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => { setLightboxIdx(null); setEditing(false); }}>
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => { setLightboxIdx(null); setEditing(false); setIsZoomed(false); }}>
           <div className="bg-background border rounded-xl max-w-4xl w-full flex flex-col md:flex-row overflow-hidden max-h-[85vh]" onClick={e => e.stopPropagation()}>
             {/* Image Pane */}
-            <div className="flex-1 bg-black/5 flex items-center justify-center p-4">
+            <div className={`flex-1 bg-black/5 flex items-center justify-center p-4 ${isZoomed ? 'overflow-auto block' : 'overflow-hidden'}`}>
                {lightboxExpense.receiptImage ? (
-                  <img src={lightboxExpense.receiptImage} alt="" className="max-w-full max-h-[70vh] object-contain shadow-md" />
+                  <img 
+                      src={lightboxExpense.receiptImage} 
+                      alt="receipt" 
+                      onClick={(e) => { e.stopPropagation(); setIsZoomed(!isZoomed); }}
+                      className={`shadow-md cursor-zoom-in transition-all duration-300 ${isZoomed ? 'max-w-none w-auto' : 'max-w-full max-h-[70vh] object-contain'}`} 
+                  />
                ) : (
                   <div className="text-muted-foreground"><FileText className="size-20 opacity-30 mx-auto"/><p className="mt-4">No Image</p></div>
                )}
@@ -205,6 +232,9 @@ export default function Gallery() {
                     <p className="text-sm text-muted-foreground">ID: {lightboxExpense.id.split('_')[0]}...</p>
                  </div>
                  <div className="flex gap-1">
+                    {lightboxExpense?.receiptImage && (
+                       <Button variant="ghost" size="icon" onClick={() => setShowFilterOptions(true)} title="Enhance Image"><Wand2 className="size-4 text-purple-500" /></Button>
+                    )}
                     <Button variant="ghost" size="icon" onClick={() => setEditing(!editing)}><Edit2 className="size-4" /></Button>
                     <Button variant="ghost" size="icon" onClick={() => setShowOcrText(!showOcrText)}><Eye className="size-4" /></Button>
                     <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteExpense(lightboxExpense.id)}><Trash2 className="size-4" /></Button>
@@ -248,6 +278,15 @@ export default function Gallery() {
             </div>
           </div>
         </div>
+      )}
+
+      {showFilterOptions && lightboxExpense?.receiptImage && (
+         <ImageFilter 
+            imageSrc={lightboxExpense.receiptImage} 
+            onApply={handleApplyFilter} 
+            onCancel={() => setShowFilterOptions(false)} 
+            isOpen={showFilterOptions} 
+         />
       )}
     </div>
   );

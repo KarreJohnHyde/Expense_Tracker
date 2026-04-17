@@ -19,6 +19,7 @@ const QRGenerator = lazy(() => import("./pages/QRGenerator"));
 const Webhooks = lazy(() => import("./pages/Webhooks"));
 const Login = lazy(() => import("./pages/Login"));
 const Gallery = lazy(() => import("./pages/Gallery"));
+const Subscriptions = lazy(() => import("./pages/Subscriptions"));
 
 function RouteFallback() {
   return (
@@ -55,6 +56,7 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: withRouteLoader(<Dashboard />) },
+      { path: "subscriptions", element: withRouteLoader(<Subscriptions />) },
       { path: "analytics", element: withRouteLoader(<Analytics />) },
       { path: "budgets", element: withRouteLoader(<Budgets />) },
       { path: "stocks", element: withRouteLoader(<StockMarket />) },

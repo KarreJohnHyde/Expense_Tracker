@@ -14,6 +14,9 @@ try:
     import numpy as np
     import pandas as pd
     from sklearn.linear_model import LinearRegression
+    from sklearn.ensemble import IsolationForest
+    from sklearn.preprocessing import PolynomialFeatures
+    from sklearn.pipeline import make_pipeline
     HAS_ML_LIBS = True
 except ImportError:
     HAS_ML_LIBS = False
@@ -204,7 +207,7 @@ def analyze_expenses(expenses):
     cat_agg = df.groupby('category')['amount'].sum().reset_index()
     categoryBreakdown = cat_agg.to_dict('records')
     
-    # 2. Forecasting (Simple Linear Regression on daily spending)
+    # 2. Forecasting (Polynomial Feature Regression on daily spending)
     forecast_data = {"predictedEndMonth": 0, "dailyAverage": 0, "trend": "stable"}
     if len(df) >= 3 and HAS_ML_LIBS:
         daily_spending = df.groupby(df['date'].dt.date)['amount'].sum().reset_index()
@@ -213,42 +216,64 @@ def analyze_expenses(expenses):
         X = daily_spending[['day_index']].values
         y = daily_spending['amount'].values
         
-        model = LinearRegression().fit(X, y)
+        # Multi-dimensional curve mapping instead of strictly flat lines
+        model = make_pipeline(PolynomialFeatures(2), LinearRegression())
+        model.fit(X, y)
+
         current_idx = daily_spending['day_index'].max()
         
         # Predict next 7 days sum
         future_X = np.array([[current_idx + i] for i in range(1, 8)])
         future_preds = model.predict(future_X)
         
-        trend = "up" if model.coef_[0] > 0 else "down"
+        trend = "up" if future_preds[-1] > future_preds[0] else "down"
         
         avg = float(np.mean(y))
         forecast_data = {
             "dailyAverage": float(round(avg, 2)),
             "predictedNext7Days": float(round(sum(future_preds), 2)),
             "trend": trend,
-            "slope": float(model.coef_[0])
+            "slope": float(future_preds[-1] - future_preds[0])
         }
     else:
         # Simple stats if insufficient data
-        forecast_data["dailyAverage"] = df['amount'].sum() / len(df)
+        forecast_data["dailyAverage"] = float(df['amount'].sum() / len(df)) if len(df) > 0 else 0.0
         
-    # 3. Anomalies (Z-Score on amounts)
+    # 3. Anomalies (Multi-feature Isolation Forest)
     anomalies = []
-    mean_val = df['amount'].mean()
-    std_val = df['amount'].std()
     
-    if std_val > 0:
-        df['zscore'] = (df['amount'] - mean_val) / std_val
-        outliers = df[np.abs(df['zscore']) > 2.0]
+    if len(df) >= 5 and HAS_ML_LIBS:
+        # Train Unsupervised DL-adjacent Isolation Forest
+        df['day'] = df['date'].dt.day.fillna(0)
+        X_iso = df[['amount', 'day']].values
+        iso = IsolationForest(contamination=0.08, random_state=42)
+        df['anomaly'] = iso.fit_predict(X_iso)
+        
+        outliers = df[df['anomaly'] == -1]
         for _, row in outliers.iterrows():
             anomalies.append({
-                "description": row.get('description', 'Unknown'),
+                "description": row.get('description', 'Unknown ML Outlier'),
                 "amount": float(row['amount']),
                 "category": row['category'],
-                "zscore": float(round(row['zscore'], 2)),
+                "severity": "High (IsolationForest Cluster Gap)",
                 "date": str(row['date'].date()) if pd.notnull(row['date']) else ""
             })
+    else:
+        # Fallback Z-Score on amounts
+        mean_val = df['amount'].mean()
+        std_val = df['amount'].std()
+        
+        if std_val > 0:
+            df['zscore'] = (df['amount'] - mean_val) / std_val
+            outliers = df[np.abs(df['zscore']) > 2.0]
+            for _, row in outliers.iterrows():
+                anomalies.append({
+                    "description": row.get('description', 'Unknown Outlier'),
+                    "amount": float(row['amount']),
+                    "category": row['category'],
+                    "severity": "Medium (Z-Score Deviation)",
+                    "date": str(row['date'].date()) if pd.notnull(row['date']) else ""
+                })
             
     return {
         "categoryBreakdown": categoryBreakdown,
