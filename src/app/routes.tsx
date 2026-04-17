@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { Suspense, lazy } from "react";
+import React from "react";
 import Root from "./pages/Root";
 import { auth } from "./lib/auth";
 
@@ -27,7 +28,7 @@ function RouteFallback() {
   );
 }
 
-function withRouteLoader(element: JSX.Element) {
+function withRouteLoader(element: React.ReactElement) {
   return <Suspense fallback={<RouteFallback />}>{element}</Suspense>;
 }
 

@@ -390,6 +390,23 @@ export const api = {
       return { week: `Week ${i + 1}`, amount: weekAmount };
     }).filter(w => w.amount !== 0);
 
+    // Build Source Breakdown (manual, receipt_scan, qr_scan, etc.)
+    const srcMap: Record<string, { amount: number; count: number }> = {};
+    expenses.forEach(e => {
+      const source = e.source || 'manual';
+      if (!srcMap[source]) srcMap[source] = { amount: 0, count: 0 };
+      srcMap[source].amount += e.amount;
+      srcMap[source].count += 1;
+    });
+    const sourceBreakdown = Object.entries(srcMap)
+      .map(([source, { amount, count }]) => ({
+        source,
+        amount,
+        count,
+        percentage: totalExpenses === 0 ? 0 : (amount / totalExpenses) * 100,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
     return {
       totalMonthly: totalExpenses, // net value
       totalOutflow: outflow,
@@ -401,6 +418,7 @@ export const api = {
       categoryBreakdown,
       paymentMethodBreakdown,
       weeklyTrend,
+      sourceBreakdown,
     };
   },
 
@@ -502,4 +520,135 @@ export const api = {
       source: 'local-fallback',
     };
   },
+
+  // ── Image Storage Management ─────────────────────────────────────────
+  /**
+   * Store receipt images and manage image assets
+   * Currently using localStorage (client-side storage)
+   * Can be enhanced to use Supabase Storage
+   */
+  uploadImage: async (file: File, expenseId: string): Promise<{ url: string; size: number; id: string }> => {
+    try {
+      const reader = new FileReader();
+      return new Promise((resolve, reject) => {
+        reader.onload = (e) => {
+          const dataUrl = e.target?.result as string;
+          const size = file.size;
+          const id = `img_${Date.now()}_${expenseId}`;
+          
+          // Store in localStorage for now
+          const storageKey = `receipt_${id}`;
+          localStorage.setItem(storageKey, dataUrl);
+          
+          resolve({
+            url: dataUrl,
+            size,
+            id,
+          });
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+      });
+    } catch (error) {
+      throw new Error(`Failed to upload image: ${(error as Error).message}`);
+    }
+  },
+
+  deleteImage: async (imageId: string): Promise<{ success: boolean }> => {
+    try {
+      const storageKey = `receipt_${imageId}`;
+      localStorage.removeItem(storageKey);
+      return { success: true };
+    } catch (error) {
+      throw new Error(`Failed to delete image: ${(error as Error).message}`);
+    }
+  },
+
+  getImage: async (imageId: string): Promise<string | null> => {
+    try {
+      const storageKey = `receipt_${imageId}`;
+      return localStorage.getItem(storageKey);
+    } catch {
+      return null;
+    }
+  },
+
+  listImages: async (): Promise<Array<{ id: string; createdAt: string }>> => {
+    try {
+      const images: Array<{ id: string; createdAt: string }> = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith('receipt_')) {
+          const id = key.replace('receipt_', '');
+          images.push({
+            id,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
+      return images;
+    } catch {
+      return [];
+    }
+  },
+
+  cleanupOldImages: async (daysOld: number = 90): Promise<{ deletedCount: number }> => {
+    try {
+      let deletedCount = 0;
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key?.startsWith('receipt_')) {
+          // Extract timestamp from key (format: receipt_TIMESTAMP_expenseId)
+          const parts = key.split('_');
+          if (parts.length >= 2) {
+            const timestamp = parseInt(parts[1]);
+            const itemDate = new Date(timestamp);
+            if (itemDate < cutoffDate) {
+              localStorage.removeItem(key);
+              deletedCount++;
+            }
+          }
+        }
+      }
+
+      return { deletedCount };
+    } catch {
+      return { deletedCount: 0 };
+    }
+  },
+
+  getStorageStats: async (): Promise<{ totalSize: number; imageCount: number; estimatedCost: number }> => {
+    try {
+      let totalSize = 0;
+      let imageCount = 0;
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith('receipt_')) {
+          const value = localStorage.getItem(key);
+          if (value) {
+            totalSize += value.length;
+            imageCount++;
+          }
+        }
+      }
+
+      // Rough estimate: base64 is ~1.33x original size
+      const estimatedMB = (totalSize / 1024 / 1024) / 1.33;
+      const costPerGB = 0.024; // AWS S3-like pricing
+      const estimatedCost = (estimatedMB / 1024) * costPerGB;
+
+      return {
+        totalSize,
+        imageCount,
+        estimatedCost: Math.round(estimatedCost * 10000) / 10000, // Round to 4 decimals
+      };
+    } catch {
+      return { totalSize: 0, imageCount: 0, estimatedCost: 0 };
+    }
+  },
 };
+

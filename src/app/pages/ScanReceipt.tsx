@@ -33,12 +33,18 @@ import {
   Layers,
   AlignLeft,
   Zap,
+  Crop,
+  Wand2,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useCurrency } from '../lib/currency';
 import { notifyUser } from '../lib/notifications';
 import { classifyExpense } from '../lib/classifier';
 import { EXPENSE_CATEGORIES } from '../lib/expenseSchema';
+import { compressImage, optimizeImageForWeb, validateImage, fileToDataUrl } from '../lib/imageUtils';
+import { ImageCropper } from '../components/ImageCropper';
+import { MultiImageUpload, type UploadedImage } from '../components/MultiImageUpload';
+import { ImageFilter } from '../components/ImageFilter';
 
 const CATEGORIES = [...EXPENSE_CATEGORIES];
 
@@ -59,6 +65,7 @@ interface ExtractedReceiptInfo {
   paymentMethod: string;
   lineItems: ExtractedLineItem[];
   allText: string;
+  aiDescription: string;
   confidence: number;
 }
 
@@ -83,6 +90,14 @@ export default function ScanReceipt() {
     format?: string;
     capturedAt: string;
   } | null>(null);
+  const [showCropper, setShowCropper] = useState(false);
+  const [showMultiUpload, setShowMultiUpload] = useState(false);
+  const [showImageFilter, setShowImageFilter] = useState(false);
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const [batchResults, setBatchResults] = useState<Array<{ image: UploadedImage; ocrText: string; extractedInfo: ExtractedReceiptInfo }>>([]);
+  const [batchProcessing, setBatchProcessing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(0);
+  const [activeBatchIndex, setActiveBatchIndex] = useState(0);
 
   const webcamRef = useRef<Webcam>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -147,9 +162,25 @@ export default function ScanReceipt() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
+    setMode('upload');
+    setShowWebcam(false);
+
+    let file: File | null = null;
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
+      file = e.dataTransfer.files[0];
+    } else if (e.dataTransfer.items) {
+      for (const item of Array.from(e.dataTransfer.items)) {
+        if (item.kind === 'file') {
+          const droppedFile = item.getAsFile();
+          if (droppedFile) {
+            file = droppedFile;
+            break;
+          }
+        }
+      }
+    }
+
+    if (file) {
       if (file.type.startsWith('image/')) {
         handleFile(file);
       } else {
@@ -164,6 +195,9 @@ export default function ScanReceipt() {
       const imageSrc = e.target?.result as string;
       setScanSource('receipt_scan');
       setImage(imageSrc);
+      setMode('upload');
+      setShowWebcam(false);
+      setSaved(false);
       processImage(imageSrc);
     };
     reader.readAsDataURL(file);
@@ -172,8 +206,29 @@ export default function ScanReceipt() {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      setMode('upload');
+      setShowWebcam(false);
       handleFile(file);
     }
+  };
+
+  const recognizeReceiptImage = async (
+    imageSrc: string,
+    onProgress?: (progress: number) => void
+  ): Promise<{ text: string; extractedInfo: ExtractedReceiptInfo }> => {
+    const optimized = await optimizeImageForWeb(imageSrc, 1000000); // 1MB target
+    const processImageSrc = optimized.optimized ? optimized.dataUrl : imageSrc;
+    const result = await Tesseract.recognize(processImageSrc, 'eng', {
+      logger: (m) => {
+        if (m.status === 'recognizing text') {
+          const progress = Math.round(m.progress * 100);
+          onProgress?.(progress);
+        }
+      },
+    });
+    const text = result.data.text;
+    const extracted = extractReceiptData(text);
+    return { text, extractedInfo: extracted };
   };
 
   const processImage = async (imageSrc: string) => {
@@ -184,16 +239,10 @@ export default function ScanReceipt() {
     setSaved(false);
 
     try {
-      // Perform OCR with progress tracking
-      const result = await Tesseract.recognize(imageSrc, 'eng', {
-        logger: (m) => {
-          if (m.status === 'recognizing text') {
-            setOcrProgress(Math.round(m.progress * 100));
-          }
-        },
+      const { text, extractedInfo: extracted } = await recognizeReceiptImage(imageSrc, (progress) => {
+        setOcrProgress(progress);
       });
 
-      const text = result.data.text;
       setOcrText(text);
       setScanMetadata({
         type: 'ocr_receipt',
@@ -201,11 +250,7 @@ export default function ScanReceipt() {
         capturedAt: new Date().toISOString(),
       });
 
-      // Extract comprehensive receipt data
-      const extracted = extractReceiptData(text);
       setExtractedInfo(extracted);
-
-      // Pre-fill form with extracted data
       setFormData({
         description: extracted.merchant || '',
         amount: extracted.total || '',
@@ -215,8 +260,6 @@ export default function ScanReceipt() {
       });
 
       toast.success('Receipt scanned successfully! ✅');
-
-      // Send notification
       notifyUser({
         type: 'scan_complete',
         title: '📸 Receipt Scanned',
@@ -229,6 +272,69 @@ export default function ScanReceipt() {
       toast.error('Failed to process receipt');
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const applyBatchResult = (index: number, results: Array<{ image: UploadedImage; ocrText: string; extractedInfo: ExtractedReceiptInfo }> = batchResults) => {
+    const batchResult = results[index];
+    if (!batchResult) return;
+
+    setActiveBatchIndex(index);
+    setImage(batchResult.image.dataUrl);
+    setOcrText(batchResult.ocrText);
+    setExtractedInfo(batchResult.extractedInfo);
+    setFormData({
+      description: batchResult.extractedInfo.merchant || '',
+      amount: batchResult.extractedInfo.total || '',
+      category: batchResult.extractedInfo.category || '',
+      paymentMethod: batchResult.extractedInfo.paymentMethod || '',
+      date: batchResult.extractedInfo.date || new Date().toISOString().split('T')[0],
+    });
+    setScanMetadata({
+      type: 'ocr_receipt',
+      rawText: batchResult.ocrText,
+      capturedAt: new Date().toISOString(),
+    });
+  };
+
+  const processBatchImages = async (images: UploadedImage[]) => {
+    setUploadedImages(images);
+    setBatchResults([]);
+    setBatchProcessing(true);
+    setBatchProgress(0);
+    setSaved(false);
+
+    const results: Array<{ image: UploadedImage; ocrText: string; extractedInfo: ExtractedReceiptInfo }> = [];
+
+    for (let i = 0; i < images.length; i++) {
+      const imageItem = images[i];
+      setImage(imageItem.dataUrl);
+      setScanSource('receipt_scan');
+      setProcessing(true);
+      setOcrText('');
+      setExtractedInfo(null);
+      setOcrProgress(0);
+
+      try {
+        const { text, extractedInfo } = await recognizeReceiptImage(imageItem.dataUrl, (progress) => {
+          setOcrProgress(progress);
+        });
+
+        results.push({ image: imageItem, ocrText: text, extractedInfo });
+        setBatchProgress(Math.round(((i + 1) / images.length) * 100));
+      } catch (error) {
+        console.error('Batch OCR Error:', error, imageItem.file.name);
+        toast.error(`Failed to process ${imageItem.file.name}`);
+      } finally {
+        setProcessing(false);
+      }
+    }
+
+    setBatchResults(results);
+    setBatchProcessing(false);
+    if (results.length > 0) {
+      applyBatchResult(0, results);
+      toast.success(`${results.length} receipt(s) processed automatically`);
     }
   };
 
@@ -344,6 +450,10 @@ export default function ScanReceipt() {
       paymentMethod = 'Net Banking';
     }
     
+    const aiDescription = merchant !== 'Unknown Merchant'
+      ? `Detected receipt from ${merchant} with ${lineItems.length} item${lineItems.length === 1 ? '' : 's'}, total ${currency.symbol}${total || '0.00'}, categorized as ${category}.`
+      : `Detected receipt with ${lineItems.length} item${lineItems.length === 1 ? '' : 's'} and total ${currency.symbol}${total || '0.00'}.`;
+
     return {
       merchant,
       total,
@@ -352,6 +462,7 @@ export default function ScanReceipt() {
       paymentMethod,
       lineItems,
       allText: text,
+      aiDescription,
       confidence: mlResult.confidence,
     };
   };
@@ -633,7 +744,7 @@ export default function ScanReceipt() {
             Scan Receipt
           </h1>
           <p className="text-muted-foreground mt-1">
-            Camera capture, file upload, or scan barcodes/QR codes — AI extracts all data automatically
+            Camera capture, batch upload, or scan barcodes/QR codes — AI extracts text, amounts, and categories automatically
           </p>
         </div>
         {image && !saved && (
@@ -646,7 +757,7 @@ export default function ScanReceipt() {
 
       {/* Mode Selection */}
       {!mode && !image && (
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card
             className="cursor-pointer group relative overflow-hidden border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
             onClick={() => {
@@ -666,32 +777,6 @@ export default function ScanReceipt() {
             </CardContent>
           </Card>
 
-          <Card
-            className={`cursor-pointer group relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 ${
-              dragActive 
-                ? 'border-primary border-2 border-dashed bg-primary/5' 
-                : 'border-border/50 hover:border-primary/50'
-            }`}
-            onClick={() => {
-              setMode('upload');
-              fileInputRef.current?.click();
-            }}
-            onDragEnter={handleDrag}
-            onDragLeave={handleDrag}
-            onDragOver={handleDrag}
-            onDrop={handleDrop}
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            <CardContent className="flex flex-col items-center justify-center py-12 relative">
-              <div className="p-4 rounded-2xl bg-emerald-500/10 mb-4 group-hover:scale-110 transition-transform duration-300">
-                <Upload className={`size-10 ${dragActive ? 'text-primary animate-bounce' : 'text-emerald-400'}`} />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Upload Image</h3>
-              <p className="text-muted-foreground text-center text-sm px-4">
-                {dragActive ? 'Drop your receipt here...' : 'Upload or drag and drop a receipt photo'}
-              </p>
-            </CardContent>
-          </Card>
 
           <Card
             className="cursor-pointer group relative overflow-hidden border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
@@ -709,15 +794,31 @@ export default function ScanReceipt() {
             </CardContent>
           </Card>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
+          <Card
+            className="cursor-pointer group relative overflow-hidden border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
+            onClick={() => setShowMultiUpload(true)}
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-pink-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <CardContent className="flex flex-col items-center justify-center py-12 relative">
+              <div className="p-4 rounded-2xl bg-pink-500/10 mb-4 group-hover:scale-110 transition-transform duration-300">
+                <ImageIcon className="size-10 text-pink-400" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">Batch Upload</h3>
+              <p className="text-muted-foreground text-center text-sm">
+                Upload multiple receipts at once
+              </p>
+            </CardContent>
+          </Card>
+
         </div>
       )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileUpload}
+        className="hidden"
+      />
 
       {/* Camera View */}
       {showWebcam && (
@@ -796,6 +897,31 @@ export default function ScanReceipt() {
       )}
 
       {/* ── Processing State ───────────────────────────────────────────── */}
+      {batchProcessing && (
+        <Card className="border-primary/30 overflow-hidden">
+          <div className="h-1 bg-muted">
+            <div
+              className="h-full bg-gradient-to-r from-primary via-primary/80 to-primary transition-all duration-300 ease-out"
+              style={{ width: `${batchProgress}%` }}
+            />
+          </div>
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center justify-center">
+              <div className="relative mb-6">
+                <div className="size-20 rounded-full border-4 border-primary/20 flex items-center justify-center">
+                  <Loader2 className="size-10 animate-spin text-primary" />
+                </div>
+                <div className="absolute -bottom-1 -right-1 size-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold">
+                  {batchProgress}%
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold mb-1">Processing batch receipts...</h3>
+              <p className="text-muted-foreground text-sm">Automatically scanning all uploaded images</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {processing && image && (
         <Card className="border-primary/30 overflow-hidden">
           <div className="h-1 bg-muted">
@@ -872,7 +998,49 @@ export default function ScanReceipt() {
               {/* Left Column: Image + Extracted Text + Line Items */}
               <div className="space-y-4">
                 {/* Image Preview */}
-                <Card className="overflow-hidden">
+              {batchResults.length > 1 && (
+                <Card className="border-border/50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <ImageIcon className="size-5 text-pink-400" />
+                      Batch Receipt Results
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="grid gap-2">
+                      {batchResults.map((result, index) => (
+                        <button
+                          key={result.image.id}
+                          type="button"
+                          onClick={() => applyBatchResult(index)}
+                          className={`w-full rounded-xl border p-3 text-left transition-all ${
+                            index === activeBatchIndex
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border/50 bg-muted/70 hover:border-primary hover:bg-muted/90'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 overflow-hidden rounded-lg bg-slate-900">
+                              <img src={result.image.dataUrl} alt={result.image.file.name} className="w-full h-full object-cover" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="text-sm font-semibold text-foreground truncate">
+                                {result.extractedInfo.merchant || result.image.file.name}
+                              </div>
+                              <div className="text-xs text-muted-foreground flex flex-wrap gap-2">
+                                <span>{currency.symbol}{result.extractedInfo.total || '0.00'}</span>
+                                <span>{result.extractedInfo.category || 'Others'}</span>
+                                <span>{formatDisplayDate(result.extractedInfo.date)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              <Card className="overflow-hidden">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
                       <CardTitle className="flex items-center gap-2 text-base">
@@ -889,7 +1057,7 @@ export default function ScanReceipt() {
                       <img src={image} alt="Receipt" className="w-full rounded-lg" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
-                    <div className="flex gap-2 mt-3">
+                    <div className="flex gap-2 mt-3 flex-wrap">
                       <Button
                         variant="outline"
                         size="sm"
@@ -907,10 +1075,28 @@ export default function ScanReceipt() {
                         variant="outline"
                         size="sm"
                         className="flex-1 gap-2"
+                        onClick={() => setShowCropper(true)}
+                      >
+                        <Crop className="size-3.5" />
+                        Crop
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 gap-2"
+                        onClick={() => setShowImageFilter(true)}
+                      >
+                        <Wand2 className="size-3.5" />
+                        Filter
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 gap-2"
                         onClick={() => fileInputRef.current?.click()}
                       >
                         <Upload className="size-3.5" />
-                        Upload New
+                        Replace
                       </Button>
                     </div>
                   </CardContent>
@@ -1045,6 +1231,17 @@ export default function ScanReceipt() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
+                    {extractedInfo?.aiDescription && (
+                      <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 mb-4">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                          <Sparkles className="size-4" />
+                          AI Description
+                        </div>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          {extractedInfo.aiDescription}
+                        </p>
+                      </div>
+                    )}
                     <div className="space-y-5">
                       {/* Description */}
                       <div className="space-y-2">
@@ -1226,9 +1423,9 @@ export default function ScanReceipt() {
                   <Camera className="size-5 text-blue-400" />
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-1">1. Capture or Upload</h4>
+                  <h4 className="font-semibold mb-1">1. Capture or Batch Upload</h4>
                   <p className="text-sm text-muted-foreground">
-                    Take a photo with your camera or upload an existing receipt image
+                    Take a photo with your camera or upload multiple receipt images at once
                   </p>
                 </div>
               </div>
@@ -1272,6 +1469,48 @@ export default function ScanReceipt() {
           </CardContent>
         </Card>
       )}
+
+      {/* Image Cropper Dialog */}
+      {image && (
+        <ImageCropper
+          imageSrc={image}
+          isOpen={showCropper}
+          onCancel={() => setShowCropper(false)}
+          onCrop={(croppedImage) => {
+            setImage(croppedImage);
+            setShowCropper(false);
+            toast.success('Image cropped! Reprocessing...');
+            processImage(croppedImage);
+          }}
+        />
+      )}
+
+      {/* Image Filter Dialog */}
+      {image && (
+        <ImageFilter
+          imageSrc={image}
+          isOpen={showImageFilter}
+          onCancel={() => setShowImageFilter(false)}
+          onApply={(filtered) => {
+            setImage(filtered);
+            setShowImageFilter(false);
+            toast.success('Filters applied! Reprocessing...');
+            processImage(filtered);
+          }}
+        />
+      )}
+
+      {/* Multi-Image Upload Dialog */}
+      <MultiImageUpload
+        isOpen={showMultiUpload}
+        onClose={() => setShowMultiUpload(false)}
+        onImagesSelected={(images) => {
+          setShowMultiUpload(false);
+          processBatchImages(images);
+        }}
+        maxImages={10}
+        compressionOptions={{ maxWidth: 2000, maxHeight: 2000, quality: 0.85 }}
+      />
     </div>
   );
 }

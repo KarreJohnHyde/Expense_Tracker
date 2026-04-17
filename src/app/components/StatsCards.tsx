@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { TrendingUp, TrendingDown, DollarSign, Calendar, CreditCard } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Calendar, CreditCard, Camera } from 'lucide-react';
 import { useCurrency } from '../lib/currency';
 import { TiltCard } from './TiltCard';
 
@@ -10,6 +10,7 @@ interface Expense {
   category: string;
   date: string;
   paymentMethod?: string;
+  source?: string;
 }
 
 interface StatsCardsProps {
@@ -91,10 +92,19 @@ export function StatsCards({ expenses }: StatsCardsProps) {
       iconBg: 'bg-rose-500/10',
       iconColor: 'text-rose-500',
     },
+    {
+      title: 'Scanned',
+      value: String(monthlyExpenses.filter((e: Expense) => e.source && ['receipt_scan', 'qr_scan', 'barcode_scan'].includes(e.source)).length),
+      icon: Camera,
+      description: `${monthlyExpenses.filter((e: Expense) => e.source === 'receipt_scan').length} receipts, ${monthlyExpenses.filter((e: Expense) => e.source === 'qr_scan' || e.source === 'barcode_scan').length} codes`,
+      gradient: 'from-teal-500 to-emerald-500',
+      iconBg: 'bg-teal-500/10',
+      iconColor: 'text-teal-500',
+    },
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
       {stats.map((stat, index) => (
         <TiltCard key={index} tiltMax={10} hoverScale={1.03} className="rounded-xl">
           <Card

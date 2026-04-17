@@ -5,13 +5,16 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import { Camera, Plus, Sparkles, QrCode, RefreshCw, Split, Tag, MapPin, AlarmClock, Edit } from 'lucide-react';
+import { Camera, Plus, Sparkles, QrCode, RefreshCw, Split, Tag, MapPin, AlarmClock, Edit, Crop, ImageIcon, Wand2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { Badge } from './ui/badge';
 import { useCurrency } from '../lib/currency';
 import { classifyExpense } from '../lib/classifier';
 import { EXPENSE_CATEGORIES, type ExpenseSource } from '../lib/expenseSchema';
+import { compressImage, optimizeImageForWeb, validateImage } from '../lib/imageUtils';
+import { ImageCropper } from './ImageCropper';
+import { ImageFilter, type ImageFilterOptions } from './ImageFilter';
 
 const CATEGORIES = [...EXPENSE_CATEGORIES];
 
@@ -85,6 +88,9 @@ export function AddExpenseDialog({
   const [isRecurring, setIsRecurring] = useState(false);
   const [splitWith, setSplitWith] = useState('');
   const [entrySource, setEntrySource] = useState<ExpenseSource>('manual');
+  const [showImageCropper, setShowImageCropper] = useState(false);
+  const [showImageFilter, setShowImageFilter] = useState(false);
+  const [compressing, setCompressing] = useState(false);
 
   const [formData, setFormData] = useState({
     amount: '',
@@ -124,7 +130,7 @@ export function AddExpenseDialog({
     if (initialData && open) {
       const data = initialData;
       const incomingCategory = data.category || '';
-      const knownCategory = CATEGORIES.includes(incomingCategory);
+      const knownCategory = CATEGORIES.includes(incomingCategory as any);
 
       setFormData(prev => ({
         ...prev,
@@ -284,14 +290,39 @@ export function AddExpenseDialog({
     }
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        if (e.target?.result) processImageWithTesseract(e.target.result as string);
-      };
-      reader.readAsDataURL(file);
+      // Validate image
+      const validation = validateImage(file);
+      if (!validation.valid) {
+        toast.error(validation.error || 'Invalid image');
+        return;
+      }
+
+      setCompressing(true);
+      try {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          if (e.target?.result) {
+            const dataUrl = e.target.result as string;
+            // Compress image before showing cropper/preview
+            const { dataUrl: compressedDataUrl, size } = await compressImage(dataUrl, {
+              maxWidth: 2000,
+              maxHeight: 2000,
+              quality: 0.85,
+            });
+            
+            // Show cropper for user to adjust
+            setReceiptPreview(compressedDataUrl);
+            setShowImageCropper(true);
+            toast.success(`Image compressed: ${Math.round(size / 1024)}KB`);
+          }
+        };
+        reader.readAsDataURL(file);
+      } finally {
+        setCompressing(false);
+      }
     }
   };
 
@@ -602,7 +633,7 @@ export function AddExpenseDialog({
 
           {/* ── Receipt Preview ───────────────────────────────── */}
           {receiptPreview && (
-            <div className="relative">
+            <div className="relative group">
               <img src={receiptPreview} alt="Receipt" className="w-full h-32 object-cover rounded-xl border" />
               <button
                 type="button"
@@ -614,14 +645,40 @@ export function AddExpenseDialog({
               <Badge className="absolute bottom-2 left-2 text-xs" variant="secondary">
                 <RefreshCw className="size-3 mr-1" /> Receipt attached
               </Badge>
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setShowImageCropper(true)}
+                  className="gap-1"
+                >
+                  <Crop className="size-3" />
+                  Crop
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setShowImageFilter(true)}
+                  className="gap-1"
+                >
+                  <Wand2 className="size-3" />
+                  Filter
+                </Button>
+              </div>
             </div>
           )}
 
           {/* ── Scan Buttons ──────────────────────────────────── */}
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" className="flex-1 gap-2" onClick={() => fileInputRef.current?.click()}>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 gap-2"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={compressing}
+            >
               <Camera className="size-4" />
-              Upload Receipt
+              {compressing ? 'Processing...' : 'Upload Receipt'}
             </Button>
             <Button type="button" variant="outline" className="flex-1 gap-2 border-primary/30 text-primary hover:bg-primary/10" onClick={startQRScanner}>
               <QrCode className="size-4" />
@@ -664,6 +721,36 @@ export function AddExpenseDialog({
             </Button>
           </div>
         </form>
+        
+        {/* Image Cropper Dialog */}
+        {receiptPreview && (
+          <ImageCropper
+            imageSrc={receiptPreview}
+            isOpen={showImageCropper}
+            onCancel={() => setShowImageCropper(false)}
+            onCrop={(croppedImage) => {
+              setReceiptPreview(croppedImage);
+              setShowImageCropper(false);
+              toast.success('Image cropped successfully!');
+              processImageWithTesseract(croppedImage);
+            }}
+          />
+        )}
+
+        {/* Image Filter Dialog */}
+        {receiptPreview && (
+          <ImageFilter
+            imageSrc={receiptPreview}
+            isOpen={showImageFilter}
+            onCancel={() => setShowImageFilter(false)}
+            onApply={(filtered) => {
+              setReceiptPreview(filtered);
+              setShowImageFilter(false);
+              processImageWithTesseract(filtered);
+            }}
+          />
+        )}
+        
         <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
       </DialogContent>
     </Dialog>

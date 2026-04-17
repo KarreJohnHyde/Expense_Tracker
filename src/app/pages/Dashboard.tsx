@@ -24,6 +24,14 @@ interface Expense {
   category: string;
   date: string;
   paymentMethod?: string;
+  source?: string;
+  scanData?: {
+    type: 'ocr_receipt' | 'qr' | 'barcode';
+    rawText: string;
+    format?: string;
+    capturedAt: string;
+  } | null;
+  receiptImage?: string | null;
 }
 
 export default function Dashboard() {

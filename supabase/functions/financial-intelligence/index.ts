@@ -323,3 +323,6 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+export {};
+
