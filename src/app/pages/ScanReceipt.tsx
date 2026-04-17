@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import Webcam from 'react-webcam';
 import Tesseract from 'tesseract.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -17,6 +18,21 @@ import {
   X,
   Save,
   QrCode,
+  Image as ImageIcon,
+  FileText,
+  Eye,
+  ReceiptText,
+  Tag,
+  CreditCard,
+  CalendarDays,
+  DollarSign,
+  ListChecks,
+  Sparkles,
+  ArrowRight,
+  RotateCcw,
+  Layers,
+  AlignLeft,
+  Zap,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useCurrency } from '../lib/currency';
@@ -28,16 +44,38 @@ const CATEGORIES = [...EXPENSE_CATEGORIES];
 
 const PAYMENT_METHODS = ['Cash', 'Credit Card', 'Debit Card', 'UPI', 'Net Banking'];
 
+// ── Extracted line-item interface ─────────────────────────────────────────────
+interface ExtractedLineItem {
+  text: string;
+  amount: number | null;
+  isTotal: boolean;
+}
+
+interface ExtractedReceiptInfo {
+  merchant: string;
+  total: string;
+  date: string;
+  category: string;
+  paymentMethod: string;
+  lineItems: ExtractedLineItem[];
+  allText: string;
+  confidence: number;
+}
+
 export default function ScanReceipt() {
+  const navigate = useNavigate();
   const { currency } = useCurrency();
   const [mode, setMode] = useState<'upload' | 'camera' | 'qr' | null>(null);
   const [image, setImage] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrText, setOcrText] = useState('');
-  const [_extractedData, setExtractedData] = useState<any>(null);
+  const [extractedInfo, setExtractedInfo] = useState<ExtractedReceiptInfo | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [showWebcam, setShowWebcam] = useState(false);
   const [qrResult, setQrResult] = useState<string>('');
+  const [showRawText, setShowRawText] = useState(false);
   const [scanSource, setScanSource] = useState<'manual' | 'receipt_scan' | 'qr_scan' | 'barcode_scan'>('manual');
   const [scanMetadata, setScanMetadata] = useState<{
     type: 'ocr_receipt' | 'qr' | 'barcode';
@@ -93,31 +131,64 @@ export default function ScanReceipt() {
     };
   }, [stopQRScanner]);
 
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.type.startsWith('image/')) {
+        handleFile(file);
+      } else {
+        toast.error('Please drop an image file (e.g., JPG, PNG)');
+      }
+    }
+  };
+
+  const handleFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const imageSrc = e.target?.result as string;
+      setScanSource('receipt_scan');
+      setImage(imageSrc);
+      processImage(imageSrc);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const imageSrc = e.target?.result as string;
-        setScanSource('receipt_scan');
-        setImage(imageSrc);
-        processImage(imageSrc);
-      };
-      reader.readAsDataURL(file);
+      handleFile(file);
     }
   };
 
   const processImage = async (imageSrc: string) => {
     setProcessing(true);
     setOcrText('');
-    setExtractedData(null);
+    setOcrProgress(0);
+    setExtractedInfo(null);
+    setSaved(false);
 
     try {
-      // Perform OCR
+      // Perform OCR with progress tracking
       const result = await Tesseract.recognize(imageSrc, 'eng', {
         logger: (m) => {
           if (m.status === 'recognizing text') {
-            console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
+            setOcrProgress(Math.round(m.progress * 100));
           }
         },
       });
@@ -130,9 +201,9 @@ export default function ScanReceipt() {
         capturedAt: new Date().toISOString(),
       });
 
-      // Extract information from OCR text
+      // Extract comprehensive receipt data
       const extracted = extractReceiptData(text);
-      setExtractedData(extracted);
+      setExtractedInfo(extracted);
 
       // Pre-fill form with extracted data
       setFormData({
@@ -149,7 +220,7 @@ export default function ScanReceipt() {
       notifyUser({
         type: 'scan_complete',
         title: '📸 Receipt Scanned',
-        message: `Scanned receipt: ${extracted.merchant || 'Unknown'} — ₹${extracted.total || '0'}`,
+        message: `Scanned receipt: ${extracted.merchant || 'Unknown'} — ${currency.symbol}${extracted.total || '0'}`,
         desktopTitle: 'Receipt Scanned',
         desktopBody: `${extracted.merchant || 'Receipt'} processed`,
       });
@@ -161,12 +232,34 @@ export default function ScanReceipt() {
     }
   };
 
-  const extractReceiptData = (text: string): any => {
+  // ── Advanced receipt data extraction ─────────────────────────────────────────
+  const extractReceiptData = (text: string): ExtractedReceiptInfo => {
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
     
-    // Extract merchant name (usually first line or contains specific keywords)
+    // Extract merchant name (usually first non-empty line or largest text)
     const merchant = lines[0] || 'Unknown Merchant';
     
+    // Extract all line items with amounts
+    const lineItems: ExtractedLineItem[] = [];
+    const amountRegex = /([0-9,]+\.?\d{0,2})\s*$/;
+    const totalKeywords = ['total', 'grand total', 'net amount', 'amount due', 'balance', 'sum', 'payable'];
+
+    for (const line of lines) {
+      const match = line.match(amountRegex);
+      if (match) {
+        const amountStr = match[1].replace(',', '');
+        const amount = parseFloat(amountStr);
+        if (!isNaN(amount) && amount > 0) {
+          const isTotal = totalKeywords.some(kw => line.toLowerCase().includes(kw));
+          lineItems.push({
+            text: line.replace(match[0], '').trim() || line,
+            amount,
+            isTotal,
+          });
+        }
+      }
+    }
+
     // Extract total amount (look for "total", "amount", "₹", "$" keywords)
     let total = '';
     const totalRegex = /(?:total|amount|₹|rs\.?|inr|usd|\$)\s*:?\s*([0-9,]+\.?\d{0,2})/i;
@@ -177,6 +270,19 @@ export default function ScanReceipt() {
         break;
       }
     }
+
+    // If no total found from keywords, use the largest amount
+    if (!total && lineItems.length > 0) {
+      const totalItem = lineItems.find(item => item.isTotal);
+      if (totalItem && totalItem.amount !== null) {
+        total = totalItem.amount.toString();
+      } else {
+        const maxItem = lineItems.reduce((max, item) =>
+          (item.amount || 0) > (max.amount || 0) ? item : max
+        );
+        if (maxItem.amount) total = maxItem.amount.toString();
+      }
+    }
     
     // Extract date
     let date = new Date().toISOString().split('T')[0];
@@ -185,9 +291,22 @@ export default function ScanReceipt() {
       const match = line.match(dateRegex);
       if (match) {
         const dateStr = match[0];
-        const parsedDate = new Date(dateStr);
-        if (!isNaN(parsedDate.getTime())) {
-          date = parsedDate.toISOString().split('T')[0];
+        // Try DD-MM-YYYY format first (common in Indian receipts)
+        const parts = dateStr.split(/[-\/]/);
+        if (parts.length === 3) {
+          let parsedDate: Date | null = null;
+          // DD-MM-YYYY
+          if (parseInt(parts[0]) <= 31 && parseInt(parts[1]) <= 12) {
+            const year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+            parsedDate = new Date(`${year}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`);
+          }
+          // YYYY-MM-DD
+          if (!parsedDate || isNaN(parsedDate.getTime())) {
+            parsedDate = new Date(dateStr);
+          }
+          if (parsedDate && !isNaN(parsedDate.getTime())) {
+            date = parsedDate.toISOString().split('T')[0];
+          }
         }
         break;
       }
@@ -198,13 +317,13 @@ export default function ScanReceipt() {
     let category = mlResult.category;
     const textLower = text.toLowerCase();
     
-    // Fallback if confidence is low, though classifyExpense handles it
+    // Fallback if confidence is low
     if (category === 'Others' || mlResult.confidence < 0.3) {
       if (textLower.includes('restaurant') || textLower.includes('cafe') || textLower.includes('food')) {
         category = 'Food & Dining';
       } else if (textLower.includes('uber') || textLower.includes('taxi') || textLower.includes('transport')) {
         category = 'Transportation';
-      } else if (textLower.includes('shop') || textLower.includes('store') || textLower.includes('market')) {
+      } else if (textLower.includes('shop') || textLower.includes('store') || textLower.includes('market') || textLower.includes('mall')) {
         category = 'Shopping';
       } else if (textLower.includes('electric') || textLower.includes('water') || textLower.includes('utility')) {
         category = 'Bills & Utilities';
@@ -225,7 +344,16 @@ export default function ScanReceipt() {
       paymentMethod = 'Net Banking';
     }
     
-    return { merchant, total, date, category, paymentMethod };
+    return {
+      merchant,
+      total,
+      date,
+      category,
+      paymentMethod,
+      lineItems,
+      allText: text,
+      confidence: mlResult.confidence,
+    };
   };
 
   const captureScannerFrame = (): string | null => {
@@ -297,6 +425,7 @@ export default function ScanReceipt() {
     // Check if it's a multiline receipt text embedded in QR
     if (decodedText.includes('\n') && (decodedText.toLowerCase().includes('total') || decodedText.toLowerCase().includes('amount') || decodedText.toLowerCase().includes('merchant') || decodedText.toLowerCase().includes('tax'))) {
       const extracted = extractReceiptData(decodedText);
+      setExtractedInfo(extracted);
       setFormData({
         description: extracted.merchant || 'QR Receipt Scan',
         amount: extracted.total || '',
@@ -324,7 +453,6 @@ export default function ScanReceipt() {
         toast.success(`UPI Payment Detected: ${pn || pa} (₹${am || 'Various'})`);
       } catch { /* not a valid URL */ }
     } else if (decodedText.toLowerCase().startsWith('wifi:')) {
-      // Parse WiFi QR Codes: WIFI:T:WPA;P:password;S:SSID;H:false;
       const ssidMatch = decodedText.match(/S:([^;]+);/);
       const ssid = ssidMatch ? ssidMatch[1] : 'Unknown Network';
       
@@ -346,7 +474,6 @@ export default function ScanReceipt() {
       });
       toast.info('Contact Card Detected');
     } else if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
-      // URL: prefill as expense + open
       window.open(decodedText, '_blank');
       try {
         const urlObj = new URL(decodedText);
@@ -362,7 +489,6 @@ export default function ScanReceipt() {
         toast.success('Navigated to URL');
       }
     } else {
-      // General Barcode / Product Code / Single line String
       const codeType = /^\d+$/.test(decodedText.trim()) ? 'Barcode' : 'QR Scan';
       setFormData({
         description: `${codeType}: ${decodedText.length > 50 ? decodedText.slice(0, 50) + '...' : decodedText}`,
@@ -427,21 +553,15 @@ export default function ScanReceipt() {
         scanData: scanMetadata,
       });
 
-      toast.success('Expense saved successfully! 💰');
-      
-      // Reset form
-      setImage(null);
-      setOcrText('');
-      setExtractedData(null);
-      setMode(null);
-      setScanMetadata(null);
-      setScanSource('manual');
-      setFormData({
-        description: '',
-        amount: '',
-        category: '',
-        paymentMethod: '',
-        date: new Date().toISOString().split('T')[0],
+      toast.success('Expense saved & added to Gallery! 💰');
+      setSaved(true);
+
+      notifyUser({
+        type: 'scan_complete',
+        title: '💾 Expense Saved',
+        message: `${formData.description} — ${currency.symbol}${formData.amount}`,
+        desktopTitle: 'Expense Saved',
+        desktopBody: `${formData.description} saved to gallery`,
       });
     } catch (error: any) {
       toast.error(error.message || 'Failed to save expense');
@@ -454,32 +574,91 @@ export default function ScanReceipt() {
     stopQRScanner();
     setImage(null);
     setOcrText('');
-    setExtractedData(null);
+    setExtractedInfo(null);
     setShowWebcam(false);
     setMode(null);
     setScanMetadata(null);
     setScanSource('manual');
+    setSaved(false);
+    setOcrProgress(0);
+    setShowRawText(false);
+    setFormData({
+      description: '',
+      amount: '',
+      category: '',
+      paymentMethod: '',
+      date: new Date().toISOString().split('T')[0],
+    });
+  };
+
+  const handleScanAnother = () => {
+    handleReset();
+  };
+
+  // ── Category icon + color helper ─────────────────────────────────────────
+  const getCategoryStyle = (cat: string) => {
+    const map: Record<string, { color: string; bg: string }> = {
+      'Food & Dining': { color: 'text-orange-400', bg: 'bg-orange-500/10' },
+      'Shopping': { color: 'text-pink-400', bg: 'bg-pink-500/10' },
+      'Transportation': { color: 'text-blue-400', bg: 'bg-blue-500/10' },
+      'Bills & Utilities': { color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
+      'Entertainment': { color: 'text-purple-400', bg: 'bg-purple-500/10' },
+      'Healthcare': { color: 'text-red-400', bg: 'bg-red-500/10' },
+      'Education': { color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
+      'Investments & Savings': { color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+      'Travel & Holidays': { color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
+    };
+    return map[cat] || { color: 'text-slate-400', bg: 'bg-slate-500/10' };
+  };
+
+  // Format date for display
+  const formatDisplayDate = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+    } catch {
+      return dateStr;
+    }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in-up">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Scan Receipt</h1>
-        <p className="text-muted-foreground">
-          Camera capture, file upload, or scan barcodes/QR codes on receipts
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20">
+              <Scan className="size-7 text-primary" />
+            </div>
+            Scan Receipt
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Camera capture, file upload, or scan barcodes/QR codes — AI extracts all data automatically
+          </p>
+        </div>
+        {image && !saved && (
+          <Button variant="outline" size="sm" onClick={handleReset} className="gap-2">
+            <RotateCcw className="size-4" />
+            Start Over
+          </Button>
+        )}
       </div>
 
       {/* Mode Selection */}
       {!mode && !image && (
         <div className="grid gap-4 md:grid-cols-3">
-          <Card className="cursor-pointer hover:border-primary transition-colors" onClick={() => {
-            setMode('camera');
-            setShowWebcam(true);
-          }}>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Camera className="size-16 text-primary mb-4" />
+          <Card
+            className="cursor-pointer group relative overflow-hidden border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
+            onClick={() => {
+              setMode('camera');
+              setShowWebcam(true);
+            }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <CardContent className="flex flex-col items-center justify-center py-12 relative">
+              <div className="p-4 rounded-2xl bg-blue-500/10 mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Camera className="size-10 text-blue-400" />
+              </div>
               <h3 className="text-xl font-semibold mb-2">Take Photo</h3>
               <p className="text-muted-foreground text-center text-sm">
                 Use your webcam to capture a receipt
@@ -487,22 +666,42 @@ export default function ScanReceipt() {
             </CardContent>
           </Card>
 
-          <Card className="cursor-pointer hover:border-primary transition-colors" onClick={() => {
-            setMode('upload');
-            fileInputRef.current?.click();
-          }}>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Upload className="size-16 text-primary mb-4" />
+          <Card
+            className={`cursor-pointer group relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 ${
+              dragActive 
+                ? 'border-primary border-2 border-dashed bg-primary/5' 
+                : 'border-border/50 hover:border-primary/50'
+            }`}
+            onClick={() => {
+              setMode('upload');
+              fileInputRef.current?.click();
+            }}
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <CardContent className="flex flex-col items-center justify-center py-12 relative">
+              <div className="p-4 rounded-2xl bg-emerald-500/10 mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Upload className={`size-10 ${dragActive ? 'text-primary animate-bounce' : 'text-emerald-400'}`} />
+              </div>
               <h3 className="text-xl font-semibold mb-2">Upload Image</h3>
-              <p className="text-muted-foreground text-center text-sm">
-                Upload a receipt photo or screenshot
+              <p className="text-muted-foreground text-center text-sm px-4">
+                {dragActive ? 'Drop your receipt here...' : 'Upload or drag and drop a receipt photo'}
               </p>
             </CardContent>
           </Card>
 
-          <Card className="cursor-pointer hover:border-primary transition-colors" onClick={startQRScanner}>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <QrCode className="size-16 text-primary mb-4" />
+          <Card
+            className="cursor-pointer group relative overflow-hidden border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
+            onClick={startQRScanner}
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <CardContent className="flex flex-col items-center justify-center py-12 relative">
+              <div className="p-4 rounded-2xl bg-violet-500/10 mb-4 group-hover:scale-110 transition-transform duration-300">
+                <QrCode className="size-10 text-violet-400" />
+              </div>
               <h3 className="text-xl font-semibold mb-2">Scan QR / Barcode</h3>
               <p className="text-muted-foreground text-center text-sm">
                 Scan QR codes or barcodes on bills
@@ -522,10 +721,13 @@ export default function ScanReceipt() {
 
       {/* Camera View */}
       {showWebcam && (
-        <Card>
+        <Card className="overflow-hidden">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>Capture Receipt</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Camera className="size-5 text-primary" />
+                Capture Receipt
+              </CardTitle>
               <Button variant="ghost" size="icon" onClick={() => {
                 setShowWebcam(false);
                 setMode(null);
@@ -544,8 +746,8 @@ export default function ScanReceipt() {
                 className="w-full rounded-lg"
               />
               <div className="flex justify-center gap-4 mt-4">
-                <Button size="lg" onClick={capturePhoto}>
-                  <Camera className="size-5 mr-2" />
+                <Button size="lg" onClick={capturePhoto} className="gap-2">
+                  <Camera className="size-5" />
                   Capture Photo
                 </Button>
                 <Button size="lg" variant="outline" onClick={() => {
@@ -593,190 +795,435 @@ export default function ScanReceipt() {
         </Card>
       )}
 
-      {/* Processing / Results */}
-      {image && !showWebcam && (
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Image Preview */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Receipt Image</CardTitle>
-                <Button variant="ghost" size="icon" onClick={handleReset}>
-                  <X className="size-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <img src={image} alt="Receipt" className="w-full rounded-lg border" />
-              <div className="flex gap-2 mt-4">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => {
-                    setImage(null);
-                    setMode('camera');
-                    setShowWebcam(true);
-                  }}
-                >
-                  <Camera className="size-4 mr-2" />
-                  Retake
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload className="size-4 mr-2" />
-                  Upload New
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Extracted Data Form */}
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {processing ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="size-5 animate-spin" />
-                    Processing Receipt...
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="size-5 text-green-600" />
-                    Extracted Data
-                  </div>
-                )}
-              </CardTitle>
-              <CardDescription>
-                {processing ? 'Analyzing receipt with OCR...' : 'Review and edit the extracted information'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {processing ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <Loader2 className="size-12 animate-spin text-primary mb-4" />
-                  <p className="text-muted-foreground">Scanning receipt...</p>
+      {/* ── Processing State ───────────────────────────────────────────── */}
+      {processing && image && (
+        <Card className="border-primary/30 overflow-hidden">
+          <div className="h-1 bg-muted">
+            <div
+              className="h-full bg-gradient-to-r from-primary via-primary/80 to-primary transition-all duration-300 ease-out"
+              style={{ width: `${ocrProgress}%` }}
+            />
+          </div>
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center justify-center">
+              <div className="relative mb-6">
+                <div className="size-20 rounded-full border-4 border-primary/20 flex items-center justify-center">
+                  <Loader2 className="size-10 animate-spin text-primary" />
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Description *</Label>
-                    <Input
-                      id="description"
-                      value={formData.description}
-                      onChange={(e: any) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Enter merchant name or description"
-                      required
-                    />
-                  </div>
+                <div className="absolute -bottom-1 -right-1 size-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold">
+                  {ocrProgress}%
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold mb-1">Extracting Receipt Data...</h3>
+              <p className="text-muted-foreground text-sm">AI is reading text, amounts, and categories</p>
+              <div className="flex gap-3 mt-4">
+                {['Reading text...', 'Finding amounts...', 'Categorizing...'].map((step, i) => (
+                  <span
+                    key={step}
+                    className={`text-xs px-3 py-1 rounded-full ${
+                      ocrProgress > (i + 1) * 30
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-muted text-muted-foreground'
+                    } transition-colors duration-300`}
+                  >
+                    {step}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="amount">Amount ({currency.symbol}) *</Label>
-                    <Input
-                      id="amount"
-                      type="number"
-                      step="0.01"
-                      value={formData.amount}
-                      onChange={(e: any) => setFormData({ ...formData, amount: e.target.value })}
-                      placeholder="0.00"
-                      required
-                    />
+      {/* ── Results: Image + Extracted Data + Form ─────────────────────── */}
+      {image && !showWebcam && !processing && (
+        <div className="space-y-6">
+          {/* Success state after save */}
+          {saved && (
+            <Card className="border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-transparent">
+              <CardContent className="py-8">
+                <div className="flex flex-col items-center text-center">
+                  <div className="size-16 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4">
+                    <CheckCircle2 className="size-8 text-emerald-500" />
                   </div>
+                  <h3 className="text-xl font-bold mb-1">Expense Saved Successfully!</h3>
+                  <p className="text-muted-foreground mb-6">
+                    Your receipt has been saved and is now visible in the Gallery.
+                  </p>
+                  <div className="flex gap-3">
+                    <Button onClick={() => navigate('/gallery')} className="gap-2">
+                      <ImageIcon className="size-4" />
+                      View in Gallery
+                      <ArrowRight className="size-4" />
+                    </Button>
+                    <Button variant="outline" onClick={handleScanAnother} className="gap-2">
+                      <Scan className="size-4" />
+                      Scan Another
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="category">Category *</Label>
-                    <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
-                      <SelectTrigger id="category">
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CATEGORIES.map((cat) => (
-                          <SelectItem key={cat} value={cat}>
-                            {cat}
-                          </SelectItem>
+          {/* Main two-column layout */}
+          {!saved && (
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Left Column: Image + Extracted Text + Line Items */}
+              <div className="space-y-4">
+                {/* Image Preview */}
+                <Card className="overflow-hidden">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <ReceiptText className="size-5 text-primary" />
+                        Receipt Image
+                      </CardTitle>
+                      <Button variant="ghost" size="icon" onClick={handleReset} className="size-8">
+                        <X className="size-4" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="relative group rounded-lg overflow-hidden border border-border/50">
+                      <img src={image} alt="Receipt" className="w-full rounded-lg" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 gap-2"
+                        onClick={() => {
+                          setImage(null);
+                          setMode('camera');
+                          setShowWebcam(true);
+                        }}
+                      >
+                        <Camera className="size-3.5" />
+                        Retake
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 gap-2"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Upload className="size-3.5" />
+                        Upload New
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Extracted Text Panel */}
+                {ocrText && (
+                  <Card className="border-border/50">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <AlignLeft className="size-5 text-cyan-400" />
+                          Extracted Text
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 font-normal">
+                            {ocrText.split('\n').filter(l => l.trim()).length} lines
+                          </span>
+                        </CardTitle>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowRawText(!showRawText)}
+                          className="gap-1 text-xs h-7"
+                        >
+                          <Eye className="size-3.5" />
+                          {showRawText ? 'Collapse' : 'Expand'}
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div
+                        className={`rounded-lg bg-slate-950/50 border border-slate-800/60 overflow-hidden transition-all duration-300 ${
+                          showRawText ? 'max-h-[500px]' : 'max-h-32'
+                        }`}
+                      >
+                        <div className="p-3 overflow-y-auto max-h-[500px]">
+                          {ocrText.split('\n').filter(l => l.trim()).map((line, i) => {
+                            // Highlight lines with amounts
+                            const hasAmount = /[0-9,]+\.\d{2}/.test(line) || /(?:₹|rs\.?|\$)\s*[0-9]/i.test(line);
+                            const isTotal = /total|amount|sum|payable|balance/i.test(line);
+                            return (
+                              <div
+                                key={i}
+                                className={`text-xs font-mono py-0.5 px-2 rounded flex items-start gap-2 ${
+                                  isTotal
+                                    ? 'bg-emerald-500/10 text-emerald-300 font-semibold'
+                                    : hasAmount
+                                    ? 'bg-primary/5 text-primary/90'
+                                    : 'text-slate-400'
+                                }`}
+                              >
+                                <span className="text-slate-600 select-none shrink-0 w-5 text-right">{i + 1}</span>
+                                <span className="break-all">{line}</span>
+                                {isTotal && (
+                                  <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 shrink-0">
+                                    TOTAL
+                                  </span>
+                                )}
+                                {hasAmount && !isTotal && (
+                                  <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary/70 shrink-0">
+                                    AMOUNT
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Line Items Breakdown */}
+                {extractedInfo && extractedInfo.lineItems.length > 0 && (
+                  <Card className="border-border/50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <ListChecks className="size-5 text-amber-400" />
+                        Detected Items
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-normal">
+                          {extractedInfo.lineItems.length} items
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="space-y-1">
+                        {extractedInfo.lineItems.map((item, i) => (
+                          <div
+                            key={i}
+                            className={`flex items-center justify-between py-2 px-3 rounded-lg text-sm ${
+                              item.isTotal
+                                ? 'bg-emerald-500/10 border border-emerald-500/20 font-semibold'
+                                : 'bg-muted/30 hover:bg-muted/50'
+                            } transition-colors`}
+                          >
+                            <span className={`truncate flex-1 mr-3 ${item.isTotal ? 'text-emerald-400' : ''}`}>
+                              {item.isTotal && <Zap className="size-3.5 inline mr-1.5" />}
+                              {item.text}
+                            </span>
+                            <span className={`font-mono font-medium shrink-0 ${
+                              item.isTotal ? 'text-emerald-400' : 'text-foreground'
+                            }`}>
+                              {currency.symbol}{item.amount?.toFixed(2)}
+                            </span>
+                          </div>
                         ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="paymentMethod">Payment Method</Label>
-                    <Select value={formData.paymentMethod} onValueChange={(value) => setFormData({ ...formData, paymentMethod: value })}>
-                      <SelectTrigger id="paymentMethod">
-                        <SelectValue placeholder="Select payment method" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PAYMENT_METHODS.map((method) => (
-                          <SelectItem key={method} value={method}>
-                            {method}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+              {/* Right Column: Editable Form */}
+              <div className="space-y-4">
+                <Card className="border-border/50">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="flex items-center gap-2">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="size-5 text-emerald-500" />
+                        Extracted Data
+                      </div>
+                      {extractedInfo && (
+                        <span className="ml-auto flex items-center gap-1.5 text-xs font-normal">
+                          <Sparkles className="size-3.5 text-amber-400" />
+                          <span className="text-muted-foreground">
+                            {Math.round(extractedInfo.confidence * 100)}% confidence
+                          </span>
+                        </span>
+                      )}
+                    </CardTitle>
+                    <CardDescription>
+                      Review and edit the extracted information
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-5">
+                      {/* Description */}
+                      <div className="space-y-2">
+                        <Label htmlFor="description" className="flex items-center gap-2 text-sm">
+                          <FileText className="size-3.5 text-muted-foreground" />
+                          Description *
+                        </Label>
+                        <Input
+                          id="description"
+                          value={formData.description}
+                          onChange={(e: any) => setFormData({ ...formData, description: e.target.value })}
+                          placeholder="Enter merchant name or description"
+                          className="h-11"
+                          required
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="date">Date *</Label>
-                    <Input
-                      id="date"
-                      type="date"
-                      value={formData.date}
-                      onChange={(e: any) => setFormData({ ...formData, date: e.target.value })}
-                      required
-                    />
-                  </div>
+                      {/* Amount */}
+                      <div className="space-y-2">
+                        <Label htmlFor="amount" className="flex items-center gap-2 text-sm">
+                          <DollarSign className="size-3.5 text-muted-foreground" />
+                          Amount ({currency.symbol}) *
+                        </Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
+                            {currency.symbol}
+                          </span>
+                          <Input
+                            id="amount"
+                            type="number"
+                            step="0.01"
+                            value={formData.amount}
+                            onChange={(e: any) => setFormData({ ...formData, amount: e.target.value })}
+                            placeholder="0.00"
+                            className="pl-8 h-11 text-lg font-semibold"
+                            required
+                          />
+                        </div>
+                      </div>
 
-                  {ocrText && (
-                    <div className="space-y-2">
-                      <Label>Raw OCR Text</Label>
-                      <div className="p-3 rounded-lg bg-muted text-xs max-h-32 overflow-y-auto">
-                        <pre className="whitespace-pre-wrap">{ocrText}</pre>
+                      {/* Category */}
+                      <div className="space-y-2">
+                        <Label htmlFor="category" className="flex items-center gap-2 text-sm">
+                          <Tag className="size-3.5 text-muted-foreground" />
+                          Category *
+                        </Label>
+                        <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
+                          <SelectTrigger id="category" className="h-11">
+                            <SelectValue placeholder="Select category">
+                              {formData.category && (
+                                <span className="flex items-center gap-2">
+                                  <span className={`size-2.5 rounded-full ${getCategoryStyle(formData.category).bg.replace('/10', '/60')}`} />
+                                  {formData.category}
+                                </span>
+                              )}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CATEGORIES.map((cat) => (
+                              <SelectItem key={cat} value={cat}>
+                                <span className="flex items-center gap-2">
+                                  <span className={`size-2 rounded-full ${getCategoryStyle(cat).bg.replace('/10', '/60')}`} />
+                                  {cat}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Payment Method */}
+                      <div className="space-y-2">
+                        <Label htmlFor="paymentMethod" className="flex items-center gap-2 text-sm">
+                          <CreditCard className="size-3.5 text-muted-foreground" />
+                          Payment Method
+                        </Label>
+                        <Select value={formData.paymentMethod} onValueChange={(value) => setFormData({ ...formData, paymentMethod: value })}>
+                          <SelectTrigger id="paymentMethod" className="h-11">
+                            <SelectValue placeholder="Select payment method" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PAYMENT_METHODS.map((method) => (
+                              <SelectItem key={method} value={method}>
+                                {method}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Date */}
+                      <div className="space-y-2">
+                        <Label htmlFor="date" className="flex items-center gap-2 text-sm">
+                          <CalendarDays className="size-3.5 text-muted-foreground" />
+                          Date *
+                        </Label>
+                        <Input
+                          id="date"
+                          type="date"
+                          value={formData.date}
+                          onChange={(e: any) => setFormData({ ...formData, date: e.target.value })}
+                          className="h-11"
+                          required
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {formatDisplayDate(formData.date)}
+                        </p>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 pt-4 border-t border-border/50">
+                        <Button
+                          className="flex-1 h-11 gap-2 text-base"
+                          onClick={handleSaveExpense}
+                          disabled={saving}
+                        >
+                          {saving ? (
+                            <>
+                              <Loader2 className="size-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="size-4" />
+                              Save Expense
+                            </>
+                          )}
+                        </Button>
+                        <Button variant="outline" onClick={handleReset} className="h-11 gap-2">
+                          <X className="size-4" />
+                          Cancel
+                        </Button>
                       </div>
                     </div>
-                  )}
+                  </CardContent>
+                </Card>
 
-                  <div className="flex gap-2 pt-4">
-                    <Button
-                      className="flex-1"
-                      onClick={handleSaveExpense}
-                      disabled={saving}
-                    >
-                      {saving ? (
-                        <>
-                          <Loader2 className="size-4 mr-2 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="size-4 mr-2" />
-                          Save Expense
-                        </>
-                      )}
-                    </Button>
-                    <Button variant="outline" onClick={handleReset}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                {/* Gallery Preview Card */}
+                <Card className="border-dashed border-border/40 bg-muted/10">
+                  <CardContent className="py-4">
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                      <div className="p-2 rounded-lg bg-primary/5">
+                        <Layers className="size-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">Gallery Integration</p>
+                        <p className="text-xs">
+                          This receipt will be saved to your{' '}
+                          <button
+                            onClick={() => navigate('/gallery')}
+                            className="text-primary hover:underline inline-flex items-center gap-1"
+                          >
+                            Media Gallery <ArrowRight className="size-3" />
+                          </button>
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Info Section */}
       {!mode && !image && (
-        <Card>
+        <Card className="border-border/40">
           <CardHeader>
-            <CardTitle>How it Works</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="size-5 text-primary" />
+              How it Works
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-4">
               <div className="flex gap-3">
-                <div className="p-2 rounded-full bg-primary/10 h-fit">
-                  <Camera className="size-5 text-primary" />
+                <div className="p-2.5 rounded-xl bg-blue-500/10 h-fit shrink-0">
+                  <Camera className="size-5 text-blue-400" />
                 </div>
                 <div>
                   <h4 className="font-semibold mb-1">1. Capture or Upload</h4>
@@ -787,25 +1234,37 @@ export default function ScanReceipt() {
               </div>
 
               <div className="flex gap-3">
-                <div className="p-2 rounded-full bg-primary/10 h-fit">
-                  <Scan className="size-5 text-primary" />
+                <div className="p-2.5 rounded-xl bg-violet-500/10 h-fit shrink-0">
+                  <Scan className="size-5 text-violet-400" />
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-1">2. AI Processing</h4>
+                  <h4 className="font-semibold mb-1">2. AI Extraction</h4>
                   <p className="text-sm text-muted-foreground">
-                    Our OCR technology automatically extracts merchant, amount, and date
+                    OCR reads all text, amounts, line items, and dates from the receipt
                   </p>
                 </div>
               </div>
 
               <div className="flex gap-3">
-                <div className="p-2 rounded-full bg-primary/10 h-fit">
-                  <CheckCircle2 className="size-5 text-primary" />
+                <div className="p-2.5 rounded-xl bg-amber-500/10 h-fit shrink-0">
+                  <Tag className="size-5 text-amber-400" />
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-1">3. Review & Save</h4>
+                  <h4 className="font-semibold mb-1">3. Smart Categorize</h4>
                   <p className="text-sm text-muted-foreground">
-                    Verify the extracted data and save it as an expense
+                    AI classifies the expense category and payment method automatically
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 h-fit shrink-0">
+                  <CheckCircle2 className="size-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-1">4. Review & Save</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Edit the data if needed and save — receipt goes to your Gallery
                   </p>
                 </div>
               </div>
