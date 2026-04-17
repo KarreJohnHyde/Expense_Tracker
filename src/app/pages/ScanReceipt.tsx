@@ -118,8 +118,8 @@ export default function ScanReceipt() {
          setOcrText("Running local OCR extraction. This may take a moment...");
          try {
              const worker = await createWorker('eng', 1, {
-                 workerPath: 'https://unpkg.com/tesseract.js@7.0.0/dist/worker.min.js',
-                 corePath: 'https://unpkg.com/tesseract.js-core@7.0.0/tesseract-core.wasm.js',
+                 workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@v5.0.0/dist/worker.min.js',
+                 corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@v5.0.0/tesseract-core.wasm.js',
                  langPath: 'https://tessdata.projectnaptha.com/4.0.0'
              });
              const ret = await worker.recognize(base64Str);

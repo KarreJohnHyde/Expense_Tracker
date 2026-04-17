@@ -20,6 +20,7 @@ const Webhooks = lazy(() => import("./pages/Webhooks"));
 const Login = lazy(() => import("./pages/Login"));
 const Gallery = lazy(() => import("./pages/Gallery"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions"));
+const ReconciliationView = lazy(() => import("./pages/ReconciliationView"));
 
 function RouteFallback() {
   return (
@@ -67,6 +68,7 @@ export const router = createBrowserRouter([
       { path: "scan-receipt", element: withRouteLoader(<ScanReceipt />) },
       { path: "gallery", element: withRouteLoader(<Gallery />) },
       { path: "qr-generator", element: withRouteLoader(<QRGenerator />) },
+      { path: "reconciliation", element: withRouteLoader(<ReconciliationView />) },
       { path: "automations", element: withRouteLoader(<Webhooks />) },
       { path: "profile", element: withRouteLoader(<Profile />) },
       { path: "settings", element: withRouteLoader(<Settings />) },

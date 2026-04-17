@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AddExpenseDialog } from '../components/AddExpenseDialog';
 import { ExpenseList } from '../components/ExpenseList';
 import { AIInsights } from '../components/AIInsights';
@@ -64,7 +64,7 @@ export default function Dashboard() {
     filterExpenses();
   }, [expenses, searchQuery, categoryFilter, dateFilter, paymentFilter]);
 
-  const loadExpenses = async () => {
+  const loadExpenses = useCallback(async () => {
     setLoading(true);
     try {
       const resp = await api.getExpenses();
@@ -78,9 +78,9 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const checkPotentialSubscriptions = (expenses: Expense[]) => {
+  const checkPotentialSubscriptions = useCallback((expenses: Expense[]) => {
     const subMap: Record<string, number> = {};
     const SUBSCRIPTION_KEYWORDS = ['netflix', 'spotify', 'prime', 'apple', 'google', 'recharge', 'bill', 'premium', 'plus', 'pro', 'membership', 'sip', 'insurance'];
     
@@ -101,7 +101,7 @@ export default function Dashboard() {
     const verified = expenses.filter(e => e.receiptImage).length;
     const score = expenses.length > 0 ? (verified / expenses.length) * 100 : 100;
     setTrustScore(Math.round(score));
-  };
+  }, []);
 
   const filterExpenses = () => {
     let filtered = [...expenses];
@@ -255,7 +255,8 @@ export default function Dashboard() {
                 <Zap className="size-3" />
                 {monthlyTransactions} transactions
               </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-transform hover:scale-105"
+                onClick={() => navigate('/reconciliation')}
                 style={{ background: 'rgba(57,153,255,0.15)', border: '1px solid rgba(57,153,255,0.25)', color: '#3999ff' }}>
                 <ShieldCheck className="size-3" />
                 {trustScore}% Trust Score

@@ -120,6 +120,39 @@ export default function Webhooks() {
     }
   };
 
+  const simulateLocalSync = async () => {
+    setTestLoading(true);
+    setTestResult(null);
+    await new Promise(r => setTimeout(r, 1500));
+    
+    // Simulate internal parsing logic
+    try {
+        const payload = {
+            sender: 'HP-HDFCBK',
+            text: 'Rs.3500 debited from A/c XX1234 on 17-Apr. UPI Ref: 629876543210. Avl Bal Rs.21,432.50 -SBI',
+            timestamp: new Date().toISOString(),
+        };
+        
+        // Directly push to local SMS parser logic if server is down
+        toast.info("Server offline. Running client-side simulation...");
+        const newLog = {
+            id: `sim_${Date.now()}`,
+            sender: payload.sender,
+            text: payload.text,
+            timestamp: payload.timestamp,
+            status: 'success',
+            token: 'local_sim'
+        };
+        setLogs(prev => [newLog, ...prev]);
+        setTestResult({ success: true, message: `✅ Local Sync Success! (Simulation)` });
+        toast.success('Simulated record processed locally!');
+    } catch (e) {
+        setTestResult({ success: false, message: 'Simulation failed' });
+    } finally {
+        setTestLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
@@ -183,15 +216,26 @@ export default function Webhooks() {
 
               {/* Test Webhook */}
               <div className="space-y-2">
-                <Button
-                  variant="outline"
-                  className="w-full gap-2 border-primary/30 text-primary hover:bg-primary/10"
-                  onClick={testWebhook}
-                  disabled={testLoading}
-                >
-                  {testLoading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                  {testLoading ? 'Sending test payload...' : 'Send Test SMS Payload'}
-                </Button>
+                <div className="flex gap-2">
+                    <Button
+                    variant="outline"
+                    className="flex-1 gap-2 border-primary/30 text-primary hover:bg-primary/10"
+                    onClick={testWebhook}
+                    disabled={testLoading}
+                    >
+                    {testLoading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                    {testLoading ? 'Sending...' : 'Sync via Cloud'}
+                    </Button>
+                    <Button
+                    variant="secondary"
+                    className="flex-1 gap-2 border-dashed border-primary/20"
+                    onClick={simulateLocalSync}
+                    disabled={testLoading}
+                    >
+                    <Layers className="size-4" />
+                    Local Simulate
+                    </Button>
+                </div>
                 {testResult && (
                   <div className={`flex items-center gap-2 text-sm p-2 rounded-lg ${
                     testResult.success ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
