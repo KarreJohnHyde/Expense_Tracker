@@ -1,33 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
+import { Card, CardTitle, CardDescription } from '../components/ui/card';
 import { api, Expense } from '../lib/api';
 import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
 import { useCurrency } from '../lib/currency';
+import { toast } from 'sonner';
 import {
-  Search,
-  Image as ImageIcon,
-  QrCode,
-  FileText,
-  Calendar,
-  Barcode,
-  Camera,
-  X,
-  ScanLine,
-  Tag,
-  CreditCard,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
-  ZoomIn,
-  Eye,
-  Download,
-  Plus,
-  Layers,
-  Filter,
+  Search, Image as ImageIcon, QrCode, FileText, Calendar,
+  Barcode, Camera, X, ScanLine, Tag, CreditCard,
+  Trash2, ChevronLeft, ChevronRight, ZoomIn, Eye,
+  Download, Plus, Layers, Edit2, Save
 } from 'lucide-react';
 
 type FilterType = 'all' | 'receipt' | 'qr' | 'barcode';
@@ -41,19 +26,20 @@ export default function Gallery() {
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [showOcrText, setShowOcrText] = useState(false);
+  const [editing, setEditing] = useState(false);
+  
+  const [editForm, setEditForm] = useState<Partial<Expense>>({});
 
   useEffect(() => {
     loadGalleryData();
-    window.addEventListener('expenseai:edge:expenses_updated', loadGalleryData);
-    return () => window.removeEventListener('expenseai:edge:expenses_updated', loadGalleryData);
   }, []);
 
   const loadGalleryData = async () => {
     setLoading(true);
     try {
       const data = await api.getExpenses();
-      // Keep media entries + captured scans.
-      setExpenses(data.expenses.filter(e => !!e.receiptImage || !!e.scanData?.rawText));
+      // Keep only entries with images or scan text.
+      setExpenses(data.expenses.filter((e: Expense) => !!e.receiptImage || !!e.scanData?.rawText));
     } catch (error) {
       console.error('Failed to load gallery', error);
     } finally {
@@ -63,12 +49,12 @@ export default function Gallery() {
 
   const filtered = expenses.filter(e => {
     const matchesSearch =
-      e.description.toLowerCase().includes(search.toLowerCase()) ||
-      e.category.toLowerCase().includes(search.toLowerCase()) ||
-      e.scanData?.rawText?.toLowerCase()?.includes(search.toLowerCase());
+      e.description?.toLowerCase().includes(search.toLowerCase()) ||
+      e.category?.toLowerCase().includes(search.toLowerCase()) ||
+      e.scanData?.rawText?.toLowerCase().includes(search.toLowerCase());
 
     if (filterType === 'all') return matchesSearch;
-    if (filterType === 'receipt') return matchesSearch && (e.source === 'receipt_scan' || (!e.scanData?.type || e.scanData.type === 'ocr_receipt'));
+    if (filterType === 'receipt') return matchesSearch && (e.source === 'receipt_scan' || e.scanData?.type === 'ocr_receipt');
     if (filterType === 'qr') return matchesSearch && e.scanData?.type === 'qr';
     if (filterType === 'barcode') return matchesSearch && e.scanData?.type === 'barcode';
     return matchesSearch;
@@ -81,16 +67,30 @@ export default function Gallery() {
       await api.deleteExpense(id);
       setExpenses(prev => prev.filter(e => e.id !== id));
       if (lightboxIdx !== null) setLightboxIdx(null);
+      toast.success('Deleted successfully');
     } catch {
-      // ignore
+      toast.error('Failed to delete item.');
+    }
+  };
+
+  const handleUpdateExpense = async () => {
+    if (!lightboxExpense) return;
+    try {
+      const updated = await api.updateExpense(lightboxExpense.id, editForm);
+      toast.success('Updated successfully');
+      
+      setExpenses(prev => prev.map(e => e.id === lightboxExpense.id ? {...e, ...editForm} : e));
+      setEditing(false);
+    } catch {
+      toast.error('Failed to update DB');
     }
   };
 
   const handleDownload = (expense: Expense) => {
     if (!expense.receiptImage) return;
     const link = document.createElement('a');
-    link.href = expense.receiptImage;
-    link.download = `receipt-${expense.description.replace(/\s+/g, '-').toLowerCase()}-${expense.id}.jpg`;
+    link.href = expense.receiptImage; // Uses pre-signed S3 URLs or data uris 
+    link.download = `receipt-${expense.description.replace(/\\s+/g, '-').toLowerCase()}-${expense.id}.jpg`;
     link.click();
   };
 
@@ -105,10 +105,8 @@ export default function Gallery() {
     return (
       <div className="space-y-6">
         <Skeleton className="h-10 w-64" />
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {[1, 2, 3, 4, 5, 6].map(i => (
-            <Skeleton key={i} className="h-56 rounded-xl" />
-          ))}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-56 rounded-xl" />)}
         </div>
       </div>
     );
@@ -116,139 +114,68 @@ export default function Gallery() {
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20">
+            <div className="p-2 rounded-xl bg-primary/10 border border-primary/20">
               <ImageIcon className="size-7 text-primary" />
             </div>
-            Media Gallery
+            Cloud Media Gallery
           </h1>
           <p className="text-muted-foreground mt-1">
-            All your scanned receipts, bills, and QR codes in one place.
-            <span className="ml-2 text-xs text-primary/70">{filtered.length} items</span>
+            All your scanned receipts securely stored on AWS.
           </p>
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-64 sm:flex-initial">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Search gallery..."
-              className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <Button
-            variant="default"
-            size="sm"
-            className="gap-2 shrink-0"
-            onClick={() => navigate('/scan-receipt')}
-          >
-            <Plus className="size-4" />
-            Scan New
-          </Button>
+        <div className="flex gap-2">
+          <Input placeholder="Search records..." className="w-64" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Button onClick={() => navigate('/scan-receipt')}><Plus className="mr-2 size-4"/> Scan</Button>
         </div>
       </div>
 
-      {/* Filter Tabs */}
       <div className="flex gap-2 flex-wrap">
-        {([
+        {[
           { key: 'all', label: 'All', icon: Layers },
           { key: 'receipt', label: 'Receipts', icon: Camera },
           { key: 'qr', label: 'QR Codes', icon: QrCode },
-          { key: 'barcode', label: 'Barcodes', icon: Barcode },
-        ] as const).map(tab => (
-          <Button
-            key={tab.key}
-            variant={filterType === tab.key ? 'default' : 'outline'}
-            size="sm"
-            className="gap-1.5 h-8"
-            onClick={() => setFilterType(tab.key)}
-          >
-            <tab.icon className="size-3.5" />
-            {tab.label}
+        ].map(tab => (
+          <Button key={tab.key} variant={filterType === tab.key ? 'default' : 'outline'} size="sm" onClick={() => setFilterType(tab.key as any)}>
+            <tab.icon className="mr-2 size-3.5" /> {tab.label}
           </Button>
         ))}
       </div>
 
-      {/* Gallery Grid */}
       {filtered.length === 0 ? (
-        <Card className="border-dashed flex flex-col items-center justify-center p-16 text-center text-muted-foreground">
-          <div className="p-4 rounded-2xl bg-muted/30 mb-4">
-            <FileText className="size-12 opacity-30" />
-          </div>
-          <CardTitle className="text-lg mb-2">No media found</CardTitle>
-          <CardDescription className="mb-4">
-            {search
-              ? 'No results match your search. Try a different query.'
-              : 'Images and receipts you scan will appear here.'}
-          </CardDescription>
-          <Button onClick={() => navigate('/scan-receipt')} className="gap-2">
-            <ScanLine className="size-4" />
-            Scan a Receipt
-          </Button>
+        <Card className="border-dashed flex flex-col items-center justify-center p-16 text-muted-foreground">
+          <FileText className="size-12 mb-4 opacity-40" />
+          <CardTitle>No records found</CardTitle>
+          <CardDescription className="mt-2">Use the scanner to digitize your receipts and sync to the cloud database.</CardDescription>
         </Card>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {filtered.map((expense, idx) => {
-            const source = getSourceBadge(expense);
+            const BadgeSource = getSourceBadge(expense);
             return (
-              <Card
-                key={expense.id}
-                className="overflow-hidden group cursor-pointer border-border/40 hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
-                onClick={() => setLightboxIdx(idx)}
-              >
-                <div className="relative h-52 w-full bg-muted">
+              <Card key={expense.id} className="overflow-hidden group cursor-pointer hover:shadow-lg transition-transform" onClick={() => {
+                 setLightboxIdx(idx); 
+                 setEditForm({ description: expense.description, amount: expense.amount, category: expense.category }); 
+              }}>
+                <div className="relative h-52 bg-slate-900 border-b">
                   {expense.receiptImage ? (
-                    <img
-                      src={expense.receiptImage as string}
-                      alt={expense.description}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
+                    <img src={expense.receiptImage} alt={expense.description} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                   ) : (
-                    <div className="h-full w-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-slate-800 to-slate-900 text-slate-100 px-3">
-                      {expense.scanData?.type === 'barcode' ? (
-                        <Barcode className="size-8 text-cyan-300" />
-                      ) : (
-                        <QrCode className="size-8 text-cyan-300" />
-                      )}
-                      <p className="text-xs text-center line-clamp-4">
-                        {expense.scanData?.rawText || 'Captured scan'}
-                      </p>
+                    <div className="flex w-full h-full justify-center items-center">
+                        <BadgeSource.icon className="size-10 text-muted-foreground" />
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
-
-                  {/* Hover overlay */}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <div className="p-2.5 rounded-full bg-white/10 backdrop-blur-sm">
-                      <ZoomIn className="size-6 text-white" />
-                    </div>
+                  <div className="absolute top-2 left-2 flex gap-1">
+                     <Badge variant="secondary" className="backdrop-blur bg-black/40 text-white"><BadgeSource.icon className="mr-1 size-3"/> {expense.category}</Badge>
                   </div>
-
-                  {/* Meta overlays */}
-                  <div className="absolute top-2 left-2 flex gap-1.5">
-                    <Badge variant="secondary" className="bg-background/80 backdrop-blur text-xs gap-1">
-                      <source.icon className="size-3" />
-                      {expense.category}
-                    </Badge>
-                  </div>
-
-                  <div className="absolute bottom-2 left-2 right-2 flex flex-col pointer-events-none">
-                    <span className="text-white font-medium text-sm truncate">
-                      {expense.description}
-                    </span>
-                    <div className="flex justify-between items-center text-white/80 text-xs mt-1">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="size-3" />
-                        {new Date(expense.date).toLocaleDateString()}
-                      </span>
-                      <span className="font-bold text-emerald-400">
-                        {formatCurrency(expense.amount)}
-                      </span>
-                    </div>
+                  <div className="absolute bottom-0 w-full p-2 bg-gradient-to-t from-black/80 to-transparent pointer-events-none text-white">
+                      <p className="font-semibold text-sm line-clamp-1">{expense.description}</p>
+                      <div className="flex justify-between text-xs mt-1">
+                          <span>{expense.date}</span>
+                          <span className="text-emerald-400 font-bold">{formatCurrency(expense.amount)}</span>
+                      </div>
                   </div>
                 </div>
               </Card>
@@ -257,151 +184,68 @@ export default function Gallery() {
         </div>
       )}
 
-      {/* ── Lightbox Modal ──────────────────────────────────────────────── */}
+      {/* Lightbox */}
       {lightboxExpense && lightboxIdx !== null && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => { setLightboxIdx(null); setShowOcrText(false); }}
-        >
-          <div
-            className="relative bg-background border border-border rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Lightbox Header */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="p-2 rounded-lg bg-primary/10 shrink-0">
-                  <ImageIcon className="size-4 text-primary" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-semibold truncate">{lightboxExpense.description}</h3>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                    <span className="flex items-center gap-1">
-                      <Tag className="size-3" />
-                      {lightboxExpense.category}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <CreditCard className="size-3" />
-                      {lightboxExpense.paymentMethod || 'Cash'}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Calendar className="size-3" />
-                      {new Date(lightboxExpense.date).toLocaleDateString()}
-                    </span>
-                    <span className="font-bold text-emerald-500">
-                      {formatCurrency(lightboxExpense.amount)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0 ml-3">
-                {lightboxExpense.scanData?.rawText && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8"
-                    title="View OCR Text"
-                    onClick={() => setShowOcrText(!showOcrText)}
-                  >
-                    <Eye className="size-4" />
-                  </Button>
-                )}
-                {lightboxExpense.receiptImage && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8"
-                    title="Download"
-                    onClick={() => handleDownload(lightboxExpense)}
-                  >
-                    <Download className="size-4" />
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 text-destructive hover:text-destructive"
-                  title="Delete"
-                  onClick={() => handleDeleteExpense(lightboxExpense.id)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  onClick={() => { setLightboxIdx(null); setShowOcrText(false); }}
-                >
-                  <X className="size-4" />
-                </Button>
-              </div>
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => { setLightboxIdx(null); setEditing(false); }}>
+          <div className="bg-background border rounded-xl max-w-4xl w-full flex flex-col md:flex-row overflow-hidden max-h-[85vh]" onClick={e => e.stopPropagation()}>
+            {/* Image Pane */}
+            <div className="flex-1 bg-black/5 flex items-center justify-center p-4">
+               {lightboxExpense.receiptImage ? (
+                  <img src={lightboxExpense.receiptImage} alt="" className="max-w-full max-h-[70vh] object-contain shadow-md" />
+               ) : (
+                  <div className="text-muted-foreground"><FileText className="size-20 opacity-30 mx-auto"/><p className="mt-4">No Image</p></div>
+               )}
             </div>
+            
+            {/* Context Pane */}
+            <div className="w-full md:w-96 p-6 border-l overflow-y-auto flex flex-col bg-card">
+               <div className="flex justify-between items-start mb-6">
+                 <div>
+                    <h2 className="font-bold text-xl">Receipt Details</h2>
+                    <p className="text-sm text-muted-foreground">ID: {lightboxExpense.id.split('_')[0]}...</p>
+                 </div>
+                 <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => setEditing(!editing)}><Edit2 className="size-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => setShowOcrText(!showOcrText)}><Eye className="size-4" /></Button>
+                    <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteExpense(lightboxExpense.id)}><Trash2 className="size-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => setLightboxIdx(null)}><X className="size-4" /></Button>
+                 </div>
+               </div>
 
-            {/* Lightbox Body */}
-            <div className="flex flex-col md:flex-row max-h-[calc(90vh-80px)] overflow-hidden">
-              {/* Image */}
-              <div className="flex-1 flex items-center justify-center bg-muted/20 p-4 min-h-[300px] overflow-auto">
-                {lightboxExpense.receiptImage ? (
-                  <img
-                    src={lightboxExpense.receiptImage as string}
-                    alt={lightboxExpense.description}
-                    className="max-w-full max-h-[70vh] object-contain rounded-lg"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                    {lightboxExpense.scanData?.type === 'barcode' ? (
-                      <Barcode className="size-16 text-cyan-400" />
-                    ) : (
-                      <QrCode className="size-16 text-cyan-400" />
-                    )}
-                    <p className="text-center max-w-sm break-all text-sm">
-                      {lightboxExpense.scanData?.rawText || 'No image available'}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* OCR Text Panel */}
-              {showOcrText && lightboxExpense.scanData?.rawText && (
-                <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-border bg-muted/10 overflow-auto">
-                  <div className="p-3 border-b border-border flex items-center gap-2">
-                    <FileText className="size-4 text-primary" />
-                    <span className="text-sm font-medium">Extracted Text</span>
-                  </div>
-                  <div className="p-3">
-                    <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed">
-                      {lightboxExpense.scanData.rawText}
+               {showOcrText && lightboxExpense.scanData ? (
+                 <div className="flex-1 space-y-4">
+                    <h3 className="font-semibold text-sm flex gap-2"><ScanLine className="size-4 text-primary" /> RAW API Extraction</h3>
+                    <pre className="text-xs bg-muted p-3 rounded font-mono overflow-auto h-64 border">
+                       {lightboxExpense.scanData.rawText}
                     </pre>
-                  </div>
-                </div>
-              )}
+                 </div>
+               ) : (
+                 <div className="space-y-4 flex-1">
+                   <div>
+                     <label className="text-xs text-muted-foreground">Description</label>
+                     {editing ? <Input value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} /> : <p className="font-medium text-lg">{lightboxExpense.description}</p>}
+                   </div>
+                   <div className="grid grid-cols-2 gap-4">
+                     <div>
+                       <label className="text-xs text-muted-foreground">Amount</label>
+                       {editing ? <Input type="number" value={editForm.amount} onChange={e => setEditForm({...editForm, amount: parseFloat(e.target.value)})} /> : <p className="font-bold text-emerald-600 text-lg">{formatCurrency(lightboxExpense.amount)}</p>}
+                     </div>
+                     <div>
+                       <label className="text-xs text-muted-foreground">Date</label>
+                       <p className="font-medium">{lightboxExpense.date}</p>
+                     </div>
+                   </div>
+                   <div>
+                     <label className="text-xs text-muted-foreground">Category</label>
+                     {editing ? <Input value={editForm.category} onChange={e => setEditForm({...editForm, category: e.target.value})} /> : <Badge variant="outline" className="mt-1">{lightboxExpense.category}</Badge>}
+                   </div>
+                   
+                   {editing && (
+                     <Button className="w-full mt-4" onClick={handleUpdateExpense}><Save className="mr-2 size-4" /> Save Cloud Changes</Button>
+                   )}
+                 </div>
+               )}
             </div>
-
-            {/* Navigation arrows */}
-            {filtered.length > 1 && (
-              <>
-                <button
-                  className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-background/80 backdrop-blur border border-border hover:bg-background transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setLightboxIdx((lightboxIdx - 1 + filtered.length) % filtered.length);
-                    setShowOcrText(false);
-                  }}
-                >
-                  <ChevronLeft className="size-5" />
-                </button>
-                <button
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-background/80 backdrop-blur border border-border hover:bg-background transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setLightboxIdx((lightboxIdx + 1) % filtered.length);
-                    setShowOcrText(false);
-                  }}
-                >
-                  <ChevronRight className="size-5" />
-                </button>
-              </>
-            )}
           </div>
         </div>
       )}
