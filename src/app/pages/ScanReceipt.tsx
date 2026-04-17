@@ -219,8 +219,34 @@ export default function ScanReceipt() {
     imageSrc: string,
     onProgress?: (progress: number) => void
   ): Promise<{ text: string; extractedInfo: ExtractedReceiptInfo }> => {
-    const optimized = await optimizeImageForWeb(imageSrc, 1000000); // 1MB target
-    const processImageSrc = optimized.optimized ? optimized.dataUrl : imageSrc;
+    // Always convert to JPEG for Tesseract — WebP causes failures in some browsers
+    let processImageSrc = imageSrc;
+    try {
+      const img = new window.Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = imageSrc;
+      });
+      const canvas = document.createElement('canvas');
+      // Cap at 3000px for OCR quality vs speed balance
+      const maxDim = 3000;
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else { w = Math.round(w * maxDim / h); h = maxDim; }
+      }
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, w, h);
+        processImageSrc = canvas.toDataURL('image/jpeg', 0.92);
+      }
+    } catch {
+      // Fallback to original if conversion fails
+    }
+
     const result = await Tesseract.recognize(processImageSrc, 'eng', {
       logger: (m) => {
         if (m.status === 'recognizing text') {
@@ -344,115 +370,197 @@ export default function ScanReceipt() {
   // ── Advanced receipt data extraction ─────────────────────────────────────────
   const extractReceiptData = (text: string): ExtractedReceiptInfo => {
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-    
-    // Extract merchant name (usually first non-empty line or largest text)
-    const merchant = lines[0] || 'Unknown Merchant';
-    
-    // Extract all line items with amounts
+    const textLower = text.toLowerCase();
+
+    // ── Extract merchant name ─────────────────────────────────────────────
+    // Strategy: First meaningful non-date, non-number line, skip common headers
+    const skipPatterns = /^(duplicate|copy|original|tax\s*invoice|invoice|receipt|cash\s*memo|bill|gst|gstin|cin|pan|fssai|date|time|sr\.?\s*no|s\.?\s*no)/i;
+    let merchant = '';
+    for (const line of lines.slice(0, 10)) {
+      const cleaned = line.replace(/[^a-zA-Z0-9\s&.,'-]/g, '').trim();
+      if (
+        cleaned.length > 2 &&
+        !skipPatterns.test(cleaned) &&
+        !/^\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}$/.test(cleaned) &&
+        !/^\d+$/.test(cleaned)
+      ) {
+        merchant = cleaned;
+        break;
+      }
+    }
+    if (!merchant) merchant = lines[0] || 'Unknown Merchant';
+
+    // ── Extract all amounts from text ─────────────────────────────────────
     const lineItems: ExtractedLineItem[] = [];
-    const amountRegex = /([0-9,]+\.?\d{0,2})\s*$/;
-    const totalKeywords = ['total', 'grand total', 'net amount', 'amount due', 'balance', 'sum', 'payable'];
+    const amountPatterns = [
+      /(?:₹|rs\.?|inr\.?)\s*([0-9,]+\.?\d{0,2})/gi,
+      /([0-9,]+\.\d{2})\s*$/,
+      /(?:amt|amount|price|mrp|total|sum|net|payable|balance|due|charge|fee|cost)\s*[:\-]?\s*(?:₹|rs\.?|inr\.?)?\s*([0-9,]+\.?\d{0,2})/gi,
+    ];
+    const totalKeywords = ['total', 'grand total', 'net amount', 'amount due', 'balance', 'sum', 'payable', 'net payable', 'amount payable', 'bill amount', 'invoice total', 'total amount', 'total amt', 'total rs', 'total payable', 'you pay', 'to pay'];
 
     for (const line of lines) {
-      const match = line.match(amountRegex);
-      if (match) {
-        const amountStr = match[1].replace(',', '');
-        const amount = parseFloat(amountStr);
-        if (!isNaN(amount) && amount > 0) {
-          const isTotal = totalKeywords.some(kw => line.toLowerCase().includes(kw));
-          lineItems.push({
-            text: line.replace(match[0], '').trim() || line,
-            amount,
-            isTotal,
-          });
+      // Try to find amounts in each line
+      const amountsFound: number[] = [];
+      for (const pattern of amountPatterns) {
+        const regex = new RegExp(pattern.source, pattern.flags);
+        let match;
+        while ((match = regex.exec(line)) !== null) {
+          const amountStr = (match[1] || match[0]).replace(/[₹,rs\.inr\s]/gi, '').trim();
+          const amount = parseFloat(amountStr);
+          if (!isNaN(amount) && amount > 0 && amount < 10000000) {
+            amountsFound.push(amount);
+          }
         }
+      }
+
+      if (amountsFound.length > 0) {
+        const maxAmount = Math.max(...amountsFound);
+        const lineLower = line.toLowerCase();
+        const isTotal = totalKeywords.some(kw => lineLower.includes(kw));
+        lineItems.push({
+          text: line,
+          amount: maxAmount,
+          isTotal,
+        });
       }
     }
 
-    // Extract total amount (look for "total", "amount", "₹", "$" keywords)
+    // ── Extract total amount ──────────────────────────────────────────────
     let total = '';
-    const totalRegex = /(?:total|amount|₹|rs\.?|inr|usd|\$)\s*:?\s*([0-9,]+\.?\d{0,2})/i;
-    for (const line of lines) {
-      const match = line.match(totalRegex);
-      if (match) {
-        total = match[1].replace(',', '');
-        break;
+
+    // Priority 1: Lines with "total" keywords
+    const totalLines = lineItems.filter(item => item.isTotal);
+    if (totalLines.length > 0) {
+      // Pick the last total (usually the final grand total)
+      const lastTotal = totalLines[totalLines.length - 1];
+      if (lastTotal.amount) total = lastTotal.amount.toFixed(2);
+    }
+
+    // Priority 2: Scan for specific total patterns across all text
+    if (!total) {
+      const totalPatterns = [
+        /(?:grand\s*total|net\s*(?:amount|payable)|total\s*(?:amount|amt|rs|payable)|bill\s*amount|you\s*pay|to\s*pay|amount\s*(?:due|payable))\s*[:\-]?\s*(?:₹|rs\.?|inr\.?)?\s*([0-9,]+\.?\d{0,2})/i,
+        /(?:total)\s*[:\-]?\s*(?:₹|rs\.?|inr\.?)?\s*([0-9,]+\.?\d{0,2})/i,
+        /(?:₹|rs\.?)\s*([0-9,]+\.\d{2})/i,
+      ];
+      for (const pattern of totalPatterns) {
+        const allMatches: string[] = [];
+        for (const line of lines) {
+          const match = line.match(pattern);
+          if (match && match[1]) {
+            const val = match[1].replace(/,/g, '');
+            if (parseFloat(val) > 0) allMatches.push(val);
+          }
+        }
+        if (allMatches.length > 0) {
+          // Use the last match (usually the grand total at the bottom)
+          total = parseFloat(allMatches[allMatches.length - 1]).toFixed(2);
+          break;
+        }
       }
     }
 
-    // If no total found from keywords, use the largest amount
+    // Priority 3: If still no total, use the largest amount found
     if (!total && lineItems.length > 0) {
-      const totalItem = lineItems.find(item => item.isTotal);
-      if (totalItem && totalItem.amount !== null) {
-        total = totalItem.amount.toString();
-      } else {
-        const maxItem = lineItems.reduce((max, item) =>
-          (item.amount || 0) > (max.amount || 0) ? item : max
-        );
-        if (maxItem.amount) total = maxItem.amount.toString();
-      }
+      const maxItem = lineItems.reduce((max, item) =>
+        (item.amount || 0) > (max.amount || 0) ? item : max
+      );
+      if (maxItem.amount) total = maxItem.amount.toFixed(2);
     }
-    
-    // Extract date
+
+    // ── Extract date ─────────────────────────────────────────────────────
     let date = new Date().toISOString().split('T')[0];
-    const dateRegex = /(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})|(\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/;
+    const datePatterns = [
+      // DD/MM/YYYY or DD-MM-YYYY
+      /(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/, 
+      // DD/MM/YY or DD-MM-YY
+      /(\d{1,2})[\/-](\d{1,2})[\/-](\d{2})(?!\d)/,
+      // YYYY-MM-DD
+      /(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/,
+      // Month name formats: 17 Apr 2026, Apr 17 2026
+      /(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{4})/i,
+      /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2}),?\s+(\d{4})/i,
+    ];
+    const monthMap: Record<string, string> = {
+      jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+      jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+    };
+
     for (const line of lines) {
-      const match = line.match(dateRegex);
-      if (match) {
-        const dateStr = match[0];
-        // Try DD-MM-YYYY format first (common in Indian receipts)
-        const parts = dateStr.split(/[-\/]/);
-        if (parts.length === 3) {
-          let parsedDate: Date | null = null;
-          // DD-MM-YYYY
-          if (parseInt(parts[0]) <= 31 && parseInt(parts[1]) <= 12) {
-            const year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
-            parsedDate = new Date(`${year}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`);
-          }
-          // YYYY-MM-DD
-          if (!parsedDate || isNaN(parsedDate.getTime())) {
-            parsedDate = new Date(dateStr);
-          }
-          if (parsedDate && !isNaN(parsedDate.getTime())) {
-            date = parsedDate.toISOString().split('T')[0];
-          }
+      let matched = false;
+      for (const pattern of datePatterns) {
+        const match = line.match(pattern);
+        if (match) {
+          try {
+            let parsedDate: Date | null = null;
+            if (/^\d{4}$/.test(match[1])) {
+              // YYYY-MM-DD
+              parsedDate = new Date(`${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`);
+            } else if (/^[A-Za-z]/.test(match[1])) {
+              // Month DD, YYYY
+              const m = monthMap[match[1].toLowerCase().substring(0, 3)];
+              if (m) parsedDate = new Date(`${match[3]}-${m}-${match[2].padStart(2, '0')}`);
+            } else if (match[4] && /^[A-Za-z]/.test(match[2] || '')) {
+              // DD Month YYYY — captured differently
+            } else {
+              // DD/MM/YYYY or DD/MM/YY
+              const day = match[1].padStart(2, '0');
+              const month = match[2].padStart(2, '0');
+              let year = match[3];
+              if (year.length === 2) year = '20' + year;
+              if (parseInt(day) <= 31 && parseInt(month) <= 12) {
+                parsedDate = new Date(`${year}-${month}-${day}`);
+              }
+            }
+            if (parsedDate && !isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 2000) {
+              date = parsedDate.toISOString().split('T')[0];
+              matched = true;
+            }
+          } catch { /* skip invalid dates */ }
+          if (matched) break;
         }
-        break;
       }
+      if (matched) break;
     }
-    
-    // Guess category using local ML classifier
+
+    // ── Guess category using local ML classifier ─────────────────────────
     const mlResult = classifyExpense(text);
     let category = mlResult.category;
-    const textLower = text.toLowerCase();
     
-    // Fallback if confidence is low
+    // Enhanced keyword-based fallback for Indian receipts
     if (category === 'Others' || mlResult.confidence < 0.3) {
-      if (textLower.includes('restaurant') || textLower.includes('cafe') || textLower.includes('food')) {
-        category = 'Food & Dining';
-      } else if (textLower.includes('uber') || textLower.includes('taxi') || textLower.includes('transport')) {
-        category = 'Transportation';
-      } else if (textLower.includes('shop') || textLower.includes('store') || textLower.includes('market') || textLower.includes('mall')) {
-        category = 'Shopping';
-      } else if (textLower.includes('electric') || textLower.includes('water') || textLower.includes('utility')) {
-        category = 'Bills & Utilities';
-      } else if (textLower.includes('movie') || textLower.includes('entertainment') || textLower.includes('ticket')) {
-        category = 'Entertainment';
-      } else if (textLower.includes('hospital') || textLower.includes('pharmacy') || textLower.includes('medical')) {
-        category = 'Healthcare';
+      const categoryKeywords: [string, string[]][] = [
+        ['Food & Dining', ['restaurant', 'cafe', 'food', 'swiggy', 'zomato', 'dining', 'biryani', 'pizza', 'burger', 'kitchen', 'bakery', 'hotel', 'dhaba', 'canteen', 'mess', 'tiffin', 'snacks']],
+        ['Transportation', ['uber', 'ola', 'taxi', 'transport', 'petrol', 'diesel', 'fuel', 'metro', 'bus', 'railway', 'flight', 'parking', 'toll', 'auto', 'rapido']],
+        ['Shopping', ['shop', 'store', 'market', 'mall', 'retail', 'mart', 'bazaar', 'amazon', 'flipkart', 'myntra', 'reliance', 'dmart', 'bigbasket', 'supermarket', 'hypermarket', 'wholesale']],
+        ['Bills & Utilities', ['electric', 'water', 'utility', 'bill', 'recharge', 'airtel', 'jio', 'bsnl', 'vodafone', 'gas', 'broadband', 'wifi', 'internet', 'dth']],
+        ['Entertainment', ['movie', 'entertainment', 'ticket', 'pvr', 'inox', 'cinema', 'netflix', 'spotify', 'gaming', 'park', 'amusement']],
+        ['Healthcare', ['hospital', 'pharmacy', 'medical', 'clinic', 'doctor', 'health', 'medicine', 'apollo', 'medplus', 'lab', 'diagnostic', 'dental']],
+        ['Education', ['school', 'college', 'university', 'course', 'training', 'book', 'stationery', 'education', 'tuition', 'coaching', 'udemy', 'coursera']],
+      ];
+      for (const [cat, keywords] of categoryKeywords) {
+        if (keywords.some(kw => textLower.includes(kw))) {
+          category = cat;
+          break;
+        }
       }
     }
-    
-    // Guess payment method
+
+    // ── Guess payment method ─────────────────────────────────────────────
     let paymentMethod = 'Cash';
-    if (textLower.includes('card') || textLower.includes('credit') || textLower.includes('debit')) {
-      paymentMethod = textLower.includes('credit') ? 'Credit Card' : 'Debit Card';
-    } else if (textLower.includes('upi') || textLower.includes('paytm') || textLower.includes('gpay') || textLower.includes('phonepe')) {
+    if (textLower.includes('credit card') || textLower.includes('credit')) {
+      paymentMethod = 'Credit Card';
+    } else if (textLower.includes('debit card') || textLower.includes('debit')) {
+      paymentMethod = 'Debit Card';
+    } else if (textLower.includes('upi') || textLower.includes('paytm') || textLower.includes('gpay') || textLower.includes('phonepe') || textLower.includes('google pay') || textLower.includes('phone pe')) {
       paymentMethod = 'UPI';
-    } else if (textLower.includes('net banking') || textLower.includes('netbanking')) {
+    } else if (textLower.includes('net banking') || textLower.includes('netbanking') || textLower.includes('neft') || textLower.includes('imps')) {
       paymentMethod = 'Net Banking';
+    } else if (textLower.includes('card') && (textLower.includes('visa') || textLower.includes('mastercard') || textLower.includes('rupay'))) {
+      paymentMethod = 'Debit Card';
     }
-    
+
     const aiDescription = merchant !== 'Unknown Merchant'
       ? `Detected receipt from ${merchant} with ${lineItems.length} item${lineItems.length === 1 ? '' : 's'}, total ${currency.symbol}${total || '0.00'}, categorized as ${category}.`
       : `Detected receipt with ${lineItems.length} item${lineItems.length === 1 ? '' : 's'} and total ${currency.symbol}${total || '0.00'}.`;

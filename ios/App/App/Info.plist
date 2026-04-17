@@ -47,5 +47,13 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Expense AI needs camera access to scan receipts, bills, QR codes, and barcodes for automatic expense entry.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Expense AI uses the microphone for voice-based expense entry.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Expense AI needs photo library access to upload receipt images for expense tracking.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Expense AI saves processed receipt images to your photo library.</string>
 </dict>
 </plist>
