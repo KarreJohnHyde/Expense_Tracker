@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
 import { useCurrency } from '../lib/currency';
 import { Heart, Brain, Lightbulb, ArrowRight, Wallet } from 'lucide-react';
 

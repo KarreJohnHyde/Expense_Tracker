@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router";
 import { Suspense, lazy } from "react";
 import React from "react";
 import Root from "./pages/Root";
+import ErrorPage from "./pages/ErrorPage";
 import { auth } from "./lib/auth";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -55,6 +56,7 @@ export const router = createBrowserRouter([
         <Root />
       </ProtectedRoute>
     ),
+    errorElement: <ErrorPage />,
     children: [
       { index: true, element: withRouteLoader(<Dashboard />) },
       { path: "subscriptions", element: withRouteLoader(<Subscriptions />) },
