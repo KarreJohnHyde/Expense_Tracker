@@ -222,8 +222,8 @@ export async function runNotificationEngine() {
       api.getExpenses().catch(() => ({ expenses: [] })),
     ]);
 
-    const budgets = budgetsRes.budgets || [];
-    const expenses = expensesRes.expenses || [];
+    const budgets: any[] = budgetsRes.budgets || [];
+    const expenses: any[] = expensesRes.expenses || [];
 
     if (Array.isArray(budgets) && Array.isArray(expenses)) {
       const now = new Date();

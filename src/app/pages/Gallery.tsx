@@ -12,11 +12,12 @@ import {
   Search, Image as ImageIcon, QrCode, FileText, Calendar,
   Barcode, Camera, X, ScanLine, Tag, CreditCard,
   Trash2, ChevronLeft, ChevronRight, ZoomIn, Eye,
-  Download, Plus, Layers, Edit2, Save, Wand2
+  Download, Plus, Layers, Edit2, Save, Wand2, AlertTriangle
 } from 'lucide-react';
 import { ImageFilter } from '../components/ImageFilter';
 
 type FilterType = 'all' | 'receipt' | 'qr' | 'barcode';
+type ConfirmActionType = 'delete' | 'clearAll';
 
 export default function Gallery() {
   const navigate = useNavigate();
@@ -32,6 +33,17 @@ export default function Gallery() {
   const [showFilterOptions, setShowFilterOptions] = useState(false);
   
   const [editForm, setEditForm] = useState<Partial<Expense>>({});
+
+  // --- Confirmation Modal State ---
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    actionType: ConfirmActionType | null;
+    itemId: string | null;
+  }>({
+    isOpen: false,
+    actionType: null,
+    itemId: null,
+  });
 
   useEffect(() => {
     loadGalleryData();
@@ -50,6 +62,48 @@ export default function Gallery() {
     }
   };
 
+  // --- Modal Handlers ---
+  const openDeleteConfirm = (itemId: string) => {
+    setConfirmModal({ isOpen: true, actionType: 'delete', itemId });
+  };
+
+  const openClearAllConfirm = () => {
+    setConfirmModal({ isOpen: true, actionType: 'clearAll', itemId: null });
+  };
+
+  const closeModal = () => {
+    setConfirmModal({ isOpen: false, actionType: null, itemId: null });
+  };
+
+  const handleConfirmAction = async () => {
+    if (confirmModal.actionType === 'delete' && confirmModal.itemId) {
+      try {
+        await api.deleteExpense(confirmModal.itemId);
+        setExpenses(prev => prev.filter(e => e.id !== confirmModal.itemId));
+        if (lightboxIdx !== null) setLightboxIdx(null);
+        toast.success('Deleted successfully');
+      } catch {
+        toast.error('Failed to delete item.');
+      }
+    } else if (confirmModal.actionType === 'clearAll') {
+      try {
+        // Delete all expenses
+        const deletePromises = expenses.map(e => api.deleteExpense(e.id));
+        await Promise.all(deletePromises);
+        setExpenses([]);
+        if (lightboxIdx !== null) setLightboxIdx(null);
+        toast.success('All records cleared successfully');
+      } catch {
+        toast.error('Failed to clear all records.');
+      }
+    }
+    closeModal();
+  };
+
+  const handleDeleteExpense = async (id: string) => {
+    openDeleteConfirm(id);
+  };
+
   const filtered = expenses.filter(e => {
     const matchesSearch =
       e.description?.toLowerCase().includes(search.toLowerCase()) ||
@@ -64,17 +118,6 @@ export default function Gallery() {
   });
 
   const lightboxExpense = lightboxIdx !== null ? filtered[lightboxIdx] : null;
-
-  const handleDeleteExpense = async (id: string) => {
-    try {
-      await api.deleteExpense(id);
-      setExpenses(prev => prev.filter(e => e.id !== id));
-      if (lightboxIdx !== null) setLightboxIdx(null);
-      toast.success('Deleted successfully');
-    } catch {
-      toast.error('Failed to delete item.');
-    }
-  };
 
   const handleApplyFilter = async (filteredImg: string) => {
     if (!lightboxExpense) return;
@@ -150,6 +193,11 @@ export default function Gallery() {
         </div>
         <div className="flex gap-2">
           <Input placeholder="Search records..." className="w-64" value={search} onChange={(e) => setSearch(e.target.value)} />
+          {filtered.length > 0 && (
+            <Button variant="outline" className="text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700" onClick={openClearAllConfirm}>
+              <Trash2 className="mr-2 size-4" /> Clear All
+            </Button>
+          )}
           <Button onClick={() => navigate('/scan-receipt')}><Plus className="mr-2 size-4"/> Scan</Button>
         </div>
       </div>
@@ -191,6 +239,35 @@ export default function Gallery() {
                   )}
                   <div className="absolute top-2 left-2 flex gap-1">
                      <Badge variant="secondary" className="backdrop-blur bg-black/40 text-white"><BadgeSource.icon className="mr-1 size-3"/> {expense.category}</Badge>
+                  </div>
+                  {/* Card Action Buttons - Edit & Delete on Hover */}
+                  <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-auto">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8 bg-white/90 hover:bg-white backdrop-blur-sm border-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLightboxIdx(idx);
+                        setEditForm({ description: expense.description, amount: expense.amount, category: expense.category });
+                        setEditing(true);
+                      }}
+                      title="Edit"
+                    >
+                      <Edit2 className="size-4 text-gray-700" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8 bg-white/90 hover:bg-red-50 backdrop-blur-sm border-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteExpense(expense.id);
+                      }}
+                      title="Delete"
+                    >
+                      <Trash2 className="size-4 text-red-600" />
+                    </Button>
                   </div>
                   <div className="absolute bottom-0 w-full p-2 bg-gradient-to-t from-black/80 to-transparent pointer-events-none text-white">
                       <p className="font-semibold text-sm line-clamp-1">{expense.description}</p>
@@ -277,6 +354,46 @@ export default function Gallery() {
                )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={closeModal}>
+          <Card className="w-full max-w-sm shadow-2xl border-red-200" onClick={e => e.stopPropagation()}>
+            <div className="p-6">
+              {/* Modal Header */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-lg bg-red-50">
+                  <AlertTriangle className="size-5 text-red-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {confirmModal.actionType === 'clearAll' ? 'Clear All Records' : 'Delete Record'}
+                </h3>
+              </div>
+
+              {/* Modal Body */}
+              <p className="text-sm text-gray-600 mb-6">
+                {confirmModal.actionType === 'clearAll'
+                  ? 'Are you absolutely sure you want to delete ALL records? This action cannot be undone and will remove all media from your AWS storage.'
+                  : 'Are you sure you want to delete this record? This action cannot be undone.'}
+              </p>
+
+              {/* Modal Footer */}
+              <div className="flex justify-end gap-3">
+                <Button variant="outline" onClick={closeModal} className="text-gray-700">
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleConfirmAction}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  <Trash2 className="mr-2 size-4" />
+                  Yes, {confirmModal.actionType === 'clearAll' ? 'Clear All' : 'Delete'}
+                </Button>
+              </div>
+            </div>
+          </Card>
         </div>
       )}
 

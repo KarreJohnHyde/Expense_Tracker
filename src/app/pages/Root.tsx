@@ -408,6 +408,11 @@ export default function Root() {
           <div className="flex items-center gap-2 shrink-0">
             <ThemeToggle />
             <NotificationsPanel />
+            <div className="w-12 h-12 rounded-lg border border-border hover:border-primary/50 transition-colors cursor-pointer flex items-center justify-center" title="AI Assistant">
+              <div className="w-10 h-10">
+                <AICFO isCompact={true} />
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -433,7 +438,6 @@ export default function Root() {
         </div>
       </motion.main>
       <AIVoiceCapture />
-      <AICFO />
       <AppLock />
     </div>
   );

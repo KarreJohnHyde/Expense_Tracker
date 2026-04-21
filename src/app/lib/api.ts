@@ -241,7 +241,7 @@ export const api = {
        };
      } catch { return { predictions: null }; }
   },
-  categorizeExpense: async () => ({ category: 'Others', confidence: 0.5 }),
+  categorizeExpense: async (description: string, amount: number) => ({ category: 'Others', confidence: 0.5 }),
   getScans: async () => {
      const expenses = getLocalExpenses();
      const scans = expenses
