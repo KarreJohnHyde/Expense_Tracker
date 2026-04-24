@@ -1,4 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { cn } from '../components/ui/utils';
 import {
   LayoutDashboard,
@@ -12,6 +13,7 @@ import {
   LineChart,
   User,
   LogOut,
+  Info,
   ArrowRightLeft,
   ScanLine,
   Bitcoin,
@@ -28,6 +30,7 @@ import {
   Repeat
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Toaster } from '../components/ui/sonner';
@@ -42,21 +45,22 @@ import { AppLock } from '../components/AppLock';
 import { AICFO } from '../components/AICFO';
 
 const navigation = [
-  { name: 'Dashboard',       href: '/',             icon: LayoutDashboard },
-  { name: 'Subscriptions',   href: '/subscriptions',icon: Repeat },
-  { name: 'Analytics',       href: '/analytics',    icon: TrendingUp },
-  { name: 'Budgets',         href: '/budgets',      icon: Wallet },
-  { name: 'Stock Market',    href: '/stocks',       icon: LineChart },
-  { name: 'Currency Trading',href: '/currency',     icon: ArrowRightLeft },
-  { name: 'Crypto Market',   href: '/crypto',       icon: Bitcoin },
-  { name: 'UPI Wallets',     href: '/wallets',      icon: Smartphone },
-  { name: 'Bank SMS',        href: '/sms-parser',   icon: MessageSquare },
-  { name: 'Scan Receipt',    href: '/scan-receipt', icon: ScanLine },
-  { name: 'Gallery',         href: '/gallery',      icon: ImageIcon },
-  { name: 'QR Generator',    href: '/qr-generator', icon: QrCode },
-  { name: 'Automations',     href: '/automations',  icon: Webhook },
-  { name: 'Profile',         href: '/profile',      icon: User },
-  { name: 'Settings',        href: '/settings',     icon: Settings },
+  { name: 'nav.dashboard',     href: '/',             icon: LayoutDashboard },
+  { name: 'nav.subscriptions', href: '/subscriptions',icon: Repeat },
+  { name: 'nav.analytics',     href: '/analytics',    icon: TrendingUp },
+  { name: 'nav.budgets',       href: '/budgets',      icon: Wallet },
+  { name: 'nav.stocks',        href: '/stocks',       icon: LineChart },
+  { name: 'nav.currency',      href: '/currency',     icon: ArrowRightLeft },
+  { name: 'nav.crypto',        href: '/crypto',       icon: Bitcoin },
+  { name: 'nav.wallets',       href: '/wallets',      icon: Smartphone },
+  { name: 'nav.sms',           href: '/sms-parser',   icon: MessageSquare },
+  { name: 'nav.scan',          href: '/scan-receipt', icon: ScanLine },
+  { name: 'nav.gallery',       href: '/gallery',      icon: ImageIcon },
+  { name: 'nav.qr',            href: '/qr-generator', icon: QrCode },
+  { name: 'nav.automations',   href: '/automations',  icon: Webhook },
+  { name: 'nav.profile',       href: '/profile',      icon: User },
+  { name: 'nav.about',         href: '/about',        icon: Info },
+  { name: 'nav.settings',      href: '/settings',     icon: Settings },
 ];
 
 // ── Search bar component ───────────────────────────────────────────────────
@@ -87,12 +91,14 @@ function FloatingSearchBar() {
 }
 
 export default function Root() {
+  const { t, i18n } = useTranslation();
   const location  = useLocation();
   const navigate  = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSidebarOpen,  setIsSidebarOpen]  = useState(true);
   const [isTouchLayout,  setIsTouchLayout]  = useState(false);
   const [user, _setUser] = useState(auth.getCurrentUser());
+  const isRTL = i18n.dir() === 'rtl';
 
   useEffect(() => {
     document.title = 'Serverless Expense Tracker - AI-Powered Financial Management';
@@ -119,7 +125,9 @@ export default function Root() {
   };
 
   const sidebarWidth = isSidebarOpen ? 'lg:w-64' : 'lg:w-[72px]';
-  const mainPadding  = isSidebarOpen ? 'lg:pl-64' : 'lg:pl-[72px]';
+  const mainPadding  = isSidebarOpen 
+    ? (isRTL ? 'lg:pr-64' : 'lg:pl-64') 
+    : (isRTL ? 'lg:pr-[72px]' : 'lg:pl-[72px]');
 
   return (
     <div className="min-h-[100svh] bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
@@ -130,7 +138,8 @@ export default function Root() {
         layout
         transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
         className={cn(
-          'hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:flex-col',
+          'hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col',
+          isRTL ? 'lg:right-0' : 'lg:left-0',
           'glass-sidebar z-30 overflow-hidden',
           sidebarWidth,
           isTouchLayout && 'lg:hidden'
@@ -225,7 +234,10 @@ export default function Root() {
 
                   {/* Active indicator bar */}
                   {isActive && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary rounded-r-full shadow-[0_0_6px_rgba(0,212,170,0.6)]" />
+                    <span className={cn(
+                      "absolute top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary shadow-[0_0_6px_rgba(0,212,170,0.6)]",
+                      isRTL ? "right-0 rounded-l-full" : "left-0 rounded-r-full"
+                    )} />
                   )}
 
                   <motion.div layout className="relative z-10 size-[18px] flex items-center justify-center shrink-0">
@@ -246,7 +258,7 @@ export default function Root() {
                         exit={{ opacity: 0, x: -5, width: 0 }}
                         className="relative z-10 whitespace-nowrap overflow-hidden block"
                       >
-                        {item.name}
+                        {t(item.name)}
                       </motion.span>
                     )}
                   </AnimatePresence>
@@ -303,7 +315,7 @@ export default function Root() {
                     exit={{ opacity: 0, width: 0 }}
                     className="whitespace-nowrap overflow-hidden"
                   >
-                    Logout
+                    {t('nav.logout')}
                   </motion.span>
                 )}
               </AnimatePresence>
@@ -354,6 +366,7 @@ export default function Root() {
 
           {/* Right controls */}
           <div className="flex items-center gap-1.5">
+            <LanguageSwitcher isCompact className="mr-1" />
             <ThemeToggle />
             {isTouchLayout && <NotificationsPanel />}
             <Button
@@ -387,7 +400,7 @@ export default function Root() {
                   )}
                 >
                   <item.icon className="size-4" />
-                  {item.name}
+                  {t(item.name)}
                 </Link>
               );
             })}
@@ -400,12 +413,16 @@ export default function Root() {
         <div
           className={cn(
             'hidden lg:flex items-center justify-between',
-            'fixed top-4 right-4 z-20 gap-3 transition-all duration-300',
-            isSidebarOpen ? 'left-[272px]' : 'left-[88px]'
+            'fixed top-4 z-20 gap-3 transition-all duration-300',
+            isRTL ? 'left-4' : 'right-4',
+            isSidebarOpen 
+              ? (isRTL ? 'right-[272px]' : 'left-[272px]') 
+              : (isRTL ? 'right-[88px]' : 'left-[88px]')
           )}
         >
           <FloatingSearchBar />
           <div className="flex items-center gap-2 shrink-0">
+            <LanguageSwitcher />
             <ThemeToggle />
             <NotificationsPanel />
             <div className="w-12 h-12 rounded-lg border border-border hover:border-primary/50 transition-colors cursor-pointer flex items-center justify-center" title="AI Assistant">

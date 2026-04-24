@@ -198,10 +198,14 @@ Deno.serve(async (req) => {
       // If image is provided, we would process it here
       // For now, we extract from the raw text
       if (!text && image) {
-        // In a real implementation, you would decode the base64 image
-        // and run OCR on it using a service like AWS Textract or similar
-        // For now, return a placeholder
-        text = image.substring(0, 100);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Missing raw_text', 
+            message: 'OCR Processor requires pre-extracted rawText. Please run Tesseract locally or via python_worker before invoking.' 
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 },
+        );
       }
 
       // Normalize the text

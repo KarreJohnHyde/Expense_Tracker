@@ -18,6 +18,10 @@ const S3_BUCKET = process.env.RECEIPT_UPLOAD_BUCKET || '';
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 const OCR_WORKER_URL = process.env.OCR_WORKER_URL || '';
 const OCR_CLI_COMMAND = process.env.OCR_CLI_COMMAND || 'python python_worker/app/cli_ocr.py';
+const DEFAULT_OCR_LANG_HINTS = (process.env.DEFAULT_OCR_LANG_HINTS || 'eng,hin,tam,tel,nld,fra,chi_sim,jpn,kor')
+  .split(',')
+  .map((entry) => entry.trim())
+  .filter(Boolean);
 
 const s3Client = new S3Client({ region: AWS_REGION });
 const rateLimiter = new Map();
@@ -63,6 +67,12 @@ function getRoutePath(event) {
   return event?.rawPath || event?.path || '/';
 }
 
+function routeMatches(routePath, target) {
+  const normalizedRoute = (routePath || '/').replace(/\/+$/, '') || '/';
+  const normalizedTarget = target.replace(/\/+$/, '') || '/';
+  return normalizedRoute === normalizedTarget || normalizedRoute.endsWith(normalizedTarget);
+}
+
 function getHttpMethod(event) {
   return event?.requestContext?.http?.method || event?.httpMethod || 'GET';
 }
@@ -77,17 +87,27 @@ function getClientIp(event) {
 
 function normalizeWorkerPayload(workerResponse, jobId, processingTimeMs) {
   const words = Array.isArray(workerResponse?.words) ? workerResponse.words : [];
+  const rawTokens = Array.isArray(workerResponse?.raw_tokens) ? workerResponse.raw_tokens : [];
   const qr = Array.isArray(workerResponse?.qr) ? workerResponse.qr : [];
   const items = Array.isArray(workerResponse?.items) ? workerResponse.items : [];
+  const processingLog = Array.isArray(workerResponse?.processing_log) ? workerResponse.processing_log : [];
+  const parsedFields = workerResponse?.parsed_fields || {};
+  const confidences = workerResponse?.confidences || {};
 
   return {
+    source_type: workerResponse?.source_type || null,
     raw_text: workerResponse?.raw_text || '',
     corrected_text: workerResponse?.corrected_text || workerResponse?.raw_text || '',
+    raw_tokens: rawTokens,
+    parsed_fields: parsedFields,
+    confidences,
     items,
     total: Number(workerResponse?.total || 0),
     date: workerResponse?.date || null,
     qr,
+    qr_payload: workerResponse?.qr_payload || (qr.length > 0 ? qr[0] : null),
     words,
+    processing_log: processingLog,
     processing_time_ms: Number(workerResponse?.processing_time_ms || processingTimeMs),
     job_id: workerResponse?.job_id || jobId,
     metadata: workerResponse?.metadata || {},
@@ -265,19 +285,29 @@ async function maybeUploadOriginalToS3({ buffer, mimeType, jobId, filename, requ
   return { bucket: S3_BUCKET, key };
 }
 
-async function invokeFastApiWorker({ buffer, mimeType, filename, blobPath, jobId, requestId }) {
-  const endpoint = `${OCR_WORKER_URL.replace(/\/$/, '')}/process-image`;
+async function invokeFastApiWorker({ buffer, mimeType, filename, blobPath, jobId, requestId, sourceType, langHints }) {
+  const baseUrl = OCR_WORKER_URL.replace(/\/$/, '');
+  const endpoint = blobPath ? `${baseUrl}/process-image-from-path` : `${baseUrl}/process-image`;
   let body;
   const headers = { 'x-job-id': jobId };
 
   if (blobPath) {
     headers['content-type'] = 'application/json';
-    body = JSON.stringify({ blob_path: blobPath, job_id: jobId });
+    body = JSON.stringify({
+      blob_path: blobPath,
+      job_id: jobId,
+      source_type: sourceType || 'signed_url',
+      lang_hints: Array.isArray(langHints) && langHints.length > 0 ? langHints : DEFAULT_OCR_LANG_HINTS,
+    });
   } else {
     const form = new FormData();
     const blob = new Blob([buffer], { type: mimeType });
     form.append('file', blob, filename || 'receipt.jpg');
     form.append('job_id', jobId);
+    form.append('source_type', sourceType || 'upload');
+    if (Array.isArray(langHints) && langHints.length > 0) {
+      form.append('lang_hints', langHints.join(','));
+    }
     body = form;
   }
 
@@ -369,12 +399,21 @@ async function processImageRequest(event, requestId) {
   let mimeType;
   let filename = `receipt-${jobId}.jpg`;
   let blobPath = null;
+  let sourceType = 'upload';
+  let langHints = [...DEFAULT_OCR_LANG_HINTS];
 
   try {
     if (contentType.includes('multipart/form-data')) {
-      const { file } = await parseMultipart(event, requestId);
+      const { file, fields } = await parseMultipart(event, requestId);
       if (!file) {
         throw new Error('Multipart request did not include a file');
+      }
+      sourceType = fields.source_type || sourceType;
+      if (fields.lang_hints) {
+        langHints = String(fields.lang_hints)
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter(Boolean);
       }
 
       validateUploadedFile({ mimeType: file.mimeType, size: file.size });
@@ -383,6 +422,10 @@ async function processImageRequest(event, requestId) {
       filename = file.filename;
     } else {
       const payload = parseJsonBody(event);
+      sourceType = payload.source_type || sourceType;
+      if (Array.isArray(payload.lang_hints) && payload.lang_hints.length > 0) {
+        langHints = payload.lang_hints.map((entry) => String(entry));
+      }
 
       if (payload.blob_path) {
         blobPath = payload.blob_path;
@@ -431,6 +474,8 @@ async function processImageRequest(event, requestId) {
           blobPath,
           jobId,
           requestId,
+          sourceType,
+          langHints,
         })
       : await invokeCliWorker({ imagePath: tempFilePath, jobId, requestId });
 
@@ -509,7 +554,7 @@ export const handler = async (event, context) => {
   }
 
   try {
-    if (method === 'GET' && routePath === '/health') {
+    if (method === 'GET' && routeMatches(routePath, '/health')) {
       return json(
         200,
         {
@@ -522,12 +567,12 @@ export const handler = async (event, context) => {
       );
     }
 
-    if (method === 'POST' && routePath === '/ocr/upload-url') {
+    if (method === 'POST' && routeMatches(routePath, '/ocr/upload-url')) {
       const payload = await createSignedUploadUrl(event, requestId);
       return json(200, payload, requestId);
     }
 
-    if (method === 'POST' && routePath === '/ocr/process-image') {
+    if (method === 'POST' && routeMatches(routePath, '/ocr/process-image')) {
       const result = await processImageRequest(event, requestId);
       return json(200, result, requestId);
     }

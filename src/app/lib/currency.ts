@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 export interface Currency {
   code: string;
@@ -6,22 +6,94 @@ export interface Currency {
   rate: number;
 }
 
-// Fallback rates (INR base)
-const FALLBACK_CURRENCIES: Currency[] = [
-  { code: 'INR', symbol: '₹', rate: 1 },
-  { code: 'USD', symbol: '$', rate: 0.012 },
-  { code: 'EUR', symbol: '€', rate: 0.011 },
-  { code: 'GBP', symbol: '£', rate: 0.0095 },
-  { code: 'JPY', symbol: '¥', rate: 1.8 },
-  { code: 'AED', symbol: 'د.إ', rate: 0.044 },
-  { code: 'SGD', symbol: 'S$', rate: 0.016 },
-  { code: 'AUD', symbol: 'A$', rate: 0.018 },
-  { code: 'CAD', symbol: 'C$', rate: 0.016 },
-  { code: 'CNY', symbol: '¥', rate: 0.087 },
-];
-
+const CURRENCY_SETTINGS_KEY = 'settings:currency';
 const CACHE_KEY = 'exchange_rates_cache';
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+const SYMBOLS: Record<string, string> = {
+  AED: 'د.إ',
+  AUD: 'A$',
+  BDT: '৳',
+  BRL: 'R$',
+  CAD: 'C$',
+  CHF: 'CHF',
+  CNY: '¥',
+  CZK: 'Kč',
+  DKK: 'kr',
+  EUR: '€',
+  GBP: '£',
+  HKD: 'HK$',
+  HUF: 'Ft',
+  IDR: 'Rp',
+  ILS: '₪',
+  INR: '₹',
+  JPY: '¥',
+  KRW: '₩',
+  LKR: 'Rs',
+  MXN: '$',
+  MYR: 'RM',
+  NOK: 'kr',
+  NZD: 'NZ$',
+  PHP: '₱',
+  PKR: 'Rs',
+  PLN: 'zł',
+  RUB: '₽',
+  SAR: '﷼',
+  SEK: 'kr',
+  SGD: 'S$',
+  THB: '฿',
+  TRY: '₺',
+  TWD: 'NT$',
+  USD: '$',
+  VND: '₫',
+  ZAR: 'R',
+};
+
+// Fallback rates (base INR = 1)
+const FALLBACK_RATES: Record<string, number> = {
+  INR: 1,
+  USD: 0.012,
+  EUR: 0.011,
+  GBP: 0.0095,
+  JPY: 1.8,
+  AED: 0.044,
+  SGD: 0.016,
+  AUD: 0.018,
+  CAD: 0.016,
+  CNY: 0.087,
+  KRW: 16.0,
+  CHF: 0.011,
+  HKD: 0.093,
+  NOK: 0.13,
+  SEK: 0.13,
+  DKK: 0.082,
+  NZD: 0.02,
+  ZAR: 0.22,
+  SAR: 0.045,
+  THB: 0.44,
+  TRY: 0.46,
+  RUB: 1.08,
+  BRL: 0.067,
+  MXN: 0.20,
+  MYR: 0.057,
+  IDR: 193,
+  VND: 306,
+  TWD: 0.38,
+  PHP: 0.68,
+  PLN: 0.045,
+  CZK: 0.28,
+  HUF: 4.2,
+  ILS: 0.044,
+  PKR: 3.3,
+  LKR: 3.6,
+  BDT: 1.4,
+};
+
+const FALLBACK_CURRENCIES: Currency[] = Object.keys(FALLBACK_RATES).map((code) => ({
+  code,
+  symbol: SYMBOLS[code] || code,
+  rate: FALLBACK_RATES[code],
+}));
 
 interface RatesCache {
   rates: Record<string, number>;
@@ -59,39 +131,53 @@ async function fetchLiveRates(): Promise<Record<string, number> | null> {
   }
 }
 
-function buildCurrencies(liveRates: Record<string, number> | null): Currency[] {
-  if (!liveRates) return FALLBACK_CURRENCIES;
-
-  const symbols: Record<string, string> = {
-    INR: '₹', USD: '$', EUR: '€', GBP: '£', JPY: '¥',
-    AED: 'د.إ', SGD: 'S$', AUD: 'A$', CAD: 'C$', CNY: '¥',
-  };
-
-  const codes = Object.keys(symbols);
-  return codes.map(code => ({
+function makeCurrency(code: string, rate: number): Currency {
+  return {
     code,
-    symbol: symbols[code],
-    rate: liveRates[code] || FALLBACK_CURRENCIES.find(c => c.code === code)?.rate || 1,
-  }));
+    symbol: SYMBOLS[code] || code,
+    rate,
+  };
 }
 
-export const CURRENCIES = FALLBACK_CURRENCIES; // static export for legacy use
+function sortWithInrDefault(currencies: Currency[]): Currency[] {
+  return [...currencies].sort((a, b) => {
+    if (a.code === 'INR') return -1;
+    if (b.code === 'INR') return 1;
+    return a.code.localeCompare(b.code);
+  });
+}
+
+function buildCurrencies(liveRates: Record<string, number> | null): Currency[] {
+  if (!liveRates) {
+    return sortWithInrDefault(FALLBACK_CURRENCIES);
+  }
+
+  const fromLive = Object.keys(liveRates)
+    .filter((code) => Number.isFinite(liveRates[code]) && liveRates[code] > 0)
+    .map((code) => makeCurrency(code, liveRates[code]));
+
+  if (fromLive.length === 0) {
+    return sortWithInrDefault(FALLBACK_CURRENCIES);
+  }
+
+  return sortWithInrDefault(fromLive);
+}
+
+export const CURRENCIES = sortWithInrDefault(FALLBACK_CURRENCIES);
 
 export function useCurrency() {
-  const [currencyCode, setCurrencyCode] = useState(() => {
-    return localStorage.getItem('settings:currency') || 'INR';
-  });
-  const [currencies, setCurrencies] = useState<Currency[]>(FALLBACK_CURRENCIES);
+  const [currencyCode, setCurrencyCode] = useState(() => localStorage.getItem(CURRENCY_SETTINGS_KEY) || 'INR');
+  const [currencies, setCurrencies] = useState<Currency[]>(CURRENCIES);
   const [ratesLive, setRatesLive] = useState(false);
 
-  // Fetch live rates on mount
   useEffect(() => {
     const cached = getCachedRates();
     if (cached) {
       setCurrencies(buildCurrencies(cached.rates));
       setRatesLive(true);
     }
-    fetchLiveRates().then(rates => {
+
+    fetchLiveRates().then((rates) => {
       if (rates) {
         setCurrencies(buildCurrencies(rates));
         setRatesLive(true);
@@ -101,7 +187,7 @@ export function useCurrency() {
 
   useEffect(() => {
     const handleStorageChange = () => {
-      setCurrencyCode(localStorage.getItem('settings:currency') || 'INR');
+      setCurrencyCode(localStorage.getItem(CURRENCY_SETTINGS_KEY) || 'INR');
     };
 
     window.addEventListener('storage', handleStorageChange);
@@ -113,24 +199,43 @@ export function useCurrency() {
     };
   }, []);
 
+  const currency = useMemo(() => {
+    const selected = currencies.find((entry) => entry.code === currencyCode);
+    if (selected) return selected;
+
+    const inr = currencies.find((entry) => entry.code === 'INR');
+    return inr || currencies[0] || { code: 'INR', symbol: '₹', rate: 1 };
+  }, [currencies, currencyCode]);
+
   const changeCurrency = (code: string) => {
-    localStorage.setItem('settings:currency', code);
-    setCurrencyCode(code);
+    const exists = currencies.some((entry) => entry.code === code);
+    const next = exists ? code : 'INR';
+    localStorage.setItem(CURRENCY_SETTINGS_KEY, next);
+    setCurrencyCode(next);
     window.dispatchEvent(new Event('currency-changed'));
   };
 
-  const currency = currencies.find((c: Currency) => c.code === currencyCode) || currencies[0];
+  const resetCurrencyToDefault = () => changeCurrency('INR');
 
   const formatCurrency = (amountInINR: number | undefined | null) => {
-    if (amountInINR == null || isNaN(amountInINR)) return `${currency.symbol}0.00`;
+    if (amountInINR == null || Number.isNaN(amountInINR)) return `${currency.symbol}0.00`;
     const converted = amountInINR * currency.rate;
-    return `${currency.symbol}${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const locale = currency.code === 'INR' ? 'en-IN' : 'en-US';
+    return `${currency.symbol}${converted.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const convertToBase = (amountInSelectedCurrency: number) => {
-    if (isNaN(amountInSelectedCurrency)) return 0;
+    if (Number.isNaN(amountInSelectedCurrency)) return 0;
     return amountInSelectedCurrency / currency.rate;
   };
 
-  return { currency, CURRENCIES: currencies, changeCurrency, formatCurrency, convertToBase, ratesLive };
+  return {
+    currency,
+    CURRENCIES: currencies,
+    changeCurrency,
+    resetCurrencyToDefault,
+    formatCurrency,
+    convertToBase,
+    ratesLive,
+  };
 }

@@ -14,6 +14,7 @@ const StockMarket = lazy(() => import("./pages/StockMarket"));
 const CurrencyTrading = lazy(() => import("./pages/CurrencyTrading"));
 const CryptoMarket = lazy(() => import("./pages/CryptoMarket"));
 const ScanReceipt = lazy(() => import("./pages/ScanReceipt"));
+const OcrPipeline = lazy(() => import("./pages/OcrPipeline"));
 const WalletTracker = lazy(() => import("./pages/WalletTracker"));
 const SMSParser = lazy(() => import("./pages/SMSParser"));
 const QRGenerator = lazy(() => import("./pages/QRGenerator"));
@@ -22,6 +23,7 @@ const Login = lazy(() => import("./pages/Login"));
 const Gallery = lazy(() => import("./pages/Gallery"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions"));
 const ReconciliationView = lazy(() => import("./pages/ReconciliationView"));
+const About = lazy(() => import("./pages/About"));
 
 function RouteFallback() {
   return (
@@ -68,11 +70,13 @@ export const router = createBrowserRouter([
       { path: "wallets", element: withRouteLoader(<WalletTracker />) },
       { path: "sms-parser", element: withRouteLoader(<SMSParser />) },
       { path: "scan-receipt", element: withRouteLoader(<ScanReceipt />) },
+      { path: "ocr-pipeline", element: withRouteLoader(<OcrPipeline />) },
       { path: "gallery", element: withRouteLoader(<Gallery />) },
       { path: "qr-generator", element: withRouteLoader(<QRGenerator />) },
       { path: "reconciliation", element: withRouteLoader(<ReconciliationView />) },
       { path: "automations", element: withRouteLoader(<Webhooks />) },
       { path: "profile", element: withRouteLoader(<Profile />) },
+      { path: "about", element: withRouteLoader(<About />) },
       { path: "settings", element: withRouteLoader(<Settings />) },
     ],
   },

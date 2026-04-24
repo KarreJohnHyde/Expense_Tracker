@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import '../styles/index.css';
+import '../lib/i18n';
 import { registerSW } from 'virtual:pwa-register';
 
 // Register PWA Service Worker immediately for mobile installation

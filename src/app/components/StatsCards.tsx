@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { TrendingUp, TrendingDown, DollarSign, Calendar, CreditCard, Camera } from 'lucide-react';
 import { useCurrency } from '../lib/currency';
@@ -18,6 +19,7 @@ interface StatsCardsProps {
 }
 
 export function StatsCards({ expenses }: StatsCardsProps) {
+  const { t } = useTranslation();
   const { formatCurrency } = useCurrency();
   const now = new Date();
   const currentMonth = now.getMonth();
@@ -56,47 +58,50 @@ export function StatsCards({ expenses }: StatsCardsProps) {
 
   const stats = [
     {
-      title: 'This Month',
+      title: t('dashboard.stats.this_month'),
       value: formatCurrency(totalMonthly),
       change: percentageChange,
       icon: DollarSign,
-      description: `${monthlyExpenses.length} transactions`,
+      description: t('dashboard.stats.transactions', { count: monthlyExpenses.length }),
       gradient: 'from-indigo-500 to-violet-500',
       iconBg: 'bg-indigo-500/10',
       iconColor: 'text-indigo-500',
     },
     {
-      title: 'Today',
+      title: t('dashboard.stats.today'),
       value: formatCurrency(totalToday),
       icon: Calendar,
-      description: `${todayExpenses.length} transactions`,
+      description: t('dashboard.stats.transactions', { count: todayExpenses.length }),
       gradient: 'from-cyan-500 to-blue-500',
       iconBg: 'bg-cyan-500/10',
       iconColor: 'text-cyan-500',
     },
     {
-      title: 'Average',
+      title: t('dashboard.stats.average'),
       value: formatCurrency(averageExpense),
       icon: CreditCard,
-      description: 'Per transaction',
+      description: t('dashboard.stats.per_transaction'),
       gradient: 'from-amber-500 to-orange-500',
       iconBg: 'bg-amber-500/10',
       iconColor: 'text-amber-500',
     },
     {
-      title: 'Largest',
+      title: t('dashboard.stats.largest'),
       value: largest ? formatCurrency(largest.amount) : '—',
       icon: TrendingUp,
-      description: largest?.category || 'No expenses',
+      description: largest?.category || t('dashboard.stats.no_expenses'),
       gradient: 'from-rose-500 to-pink-500',
       iconBg: 'bg-rose-500/10',
       iconColor: 'text-rose-500',
     },
     {
-      title: 'Scanned',
+      title: t('dashboard.stats.scanned'),
       value: String(monthlyExpenses.filter((e: Expense) => e.source && ['receipt_scan', 'qr_scan', 'barcode_scan'].includes(e.source)).length),
       icon: Camera,
-      description: `${monthlyExpenses.filter((e: Expense) => e.source === 'receipt_scan').length} receipts, ${monthlyExpenses.filter((e: Expense) => e.source === 'qr_scan' || e.source === 'barcode_scan').length} codes`,
+      description: t('dashboard.stats.receipts_codes', { 
+        receipts: monthlyExpenses.filter((e: Expense) => e.source === 'receipt_scan').length,
+        codes: monthlyExpenses.filter((e: Expense) => e.source === 'qr_scan' || e.source === 'barcode_scan').length
+      }),
       gradient: 'from-teal-500 to-emerald-500',
       iconBg: 'bg-teal-500/10',
       iconColor: 'text-teal-500',

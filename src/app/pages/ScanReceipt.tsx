@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { createWorker } from 'tesseract.js';
 import { useNavigate } from 'react-router';
 import Webcam from 'react-webcam';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -26,7 +27,7 @@ interface ExtractedReceiptInfo {
 }
 
 const SHARED_VIDEO_CONSTRAINTS = {
-  facingMode: { exact: "environment" },
+  facingMode: "environment",
   width: { ideal: 1920 },
   height: { ideal: 1080 },
   frameRate: { ideal: 30 }
@@ -224,12 +225,36 @@ export default function ScanReceipt() {
         preprocessedStr = await advancedPreprocess(base64Str, OCR_PRESETS.RECEIPT_AI_ENHANCED);
       }
       
-      setOcrText('✓ Preprocessing complete. Running text extraction...');
+      setOcrText('✓ Preprocessing complete. Running local Tesseract OCR...');
 
-      // Step 3: Try Supabase Edge Function for OCR
+      // Step 3: Extract text locally first
+      let rawTextResult = '';
+      try {
+         rawTextResult = await extractTextLocal(preprocessedStr);
+      } catch (err) {
+         console.warn('Tesseract failed, using fallback.', err);
+      }
+
+      if (!rawTextResult || rawTextResult.trim().length < 5) {
+         setOcrText('⚠️ Local OCR failed, falling back to smart canvas extraction...');
+         const result = await smartExtractText(preprocessedStr, { grayscale: true });
+         rawTextResult = result.text || '';
+         if (!rawTextResult || rawTextResult.trim().length < 5) {
+             rawTextResult = await extractTextFromCanvas(preprocessedStr);
+         }
+      }
+
+      if (!rawTextResult || rawTextResult.trim().length < 5) {
+         throw new Error("Could not extract any readable text.");
+      }
+      
+      setExtractedText(rawTextResult);
+
+      // Step 4: Try Supabase Edge Function to parse the raw text semantically
+      setOcrText('⏳ Extracted raw text. Pinging AI for structural parsing...');
       try {
         const { data, error } = await supabase.functions.invoke('ocr-processor', {
-          body: { image: preprocessedStr },
+          body: { rawText: rawTextResult, image: '' },
         });
 
         if (error) throw new Error(error.message);
@@ -242,25 +267,23 @@ export default function ScanReceipt() {
             Date: data.extractedData?.Date || new Date().toISOString().split('T')[0],
             PaymentMethod: data.extractedData?.PaymentMethod || 'Cash',
           });
-          toast.success('✓ Successfully extracted text from image!');
+          toast.success('✓ Successfully extracted and parsed text!');
           setProcessing(false);
           return;
         }
       } catch (edgeError) {
-        console.warn('Edge Function failed, trying fallback...', edgeError);
-        setOcrText('⚠ Cloud service unavailable, using local extraction...');
+        console.warn('Edge Function parsing failed, using local Regex...', edgeError);
       }
 
-      // Step 4: Fallback to local extraction
-      await performLocalOCRExtraction(preprocessedStr);
+      // Final fallback if edge extraction fails
+      setOcrText(rawTextResult);
+      setFormData(fallbackRegexExtraction(rawTextResult));
+      toast.success('✓ Processed locally with Regex Fallback!');
     } catch (error) {
       console.error('Fatal OCR error:', error);
       setOcrText(`❌ Error: ${(error as Error).message}\n\nUsing default values...`);
-      
-      // Final fallback
       const fallbackText = "Receipt\nDate: " + new Date().toISOString().split('T')[0];
-      const fallbackData = fallbackRegexExtraction(fallbackText);
-      setFormData(fallbackData);
+      setFormData(fallbackRegexExtraction(fallbackText));
       toast.warning('Using default values - please verify');
     } finally {
       setProcessing(false);
@@ -332,127 +355,16 @@ Timestamp: ${new Date().toLocaleTimeString()}
     setOcrText(header + '\n' + text + footer);
   };
 
-  const performLocalOCRExtraction = async (imageBase64: string) => {
-    setOcrText('🔍 Attempting real OCR with Tesseract.js...');
-    
-    // Try Tesseract.js first for actual text recognition
+  const extractTextLocal = async (imageBase64: string): Promise<string> => {
     try {
-      const response = await fetch('https://cdn.jsdelivr.net/npm/tesseract.js@v5.0.4/dist/tesseract.min.js');
-      if (response.ok) {
-        // Load Tesseract dynamically
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@v5.0.4/dist/tesseract.min.js';
-        
-        return new Promise((resolve) => {
-          script.onload = async () => {
-            try {
-              const { createWorker } = (window as any).Tesseract;
-              if (createWorker) {
-                const worker = await createWorker('eng', 1, {
-                  corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@v5.0.4',
-                  workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@v5.0.4/dist/worker.min.js',
-                });
-                
-                setOcrText('⏳ Processing with Tesseract OCR engine...');
-                const { data: { text } } = await worker.recognize(imageBase64);
-                await worker.terminate();
-                                if (text && text.trim().length > 5) {
-                   setExtractedText(text);
-                  setOcrText(text);
-                  setFormData(fallbackRegexExtraction(text));
-                  toast.success('✓ Text recognized with Tesseract OCR!');
-                  setProcessing(false);
-                  resolve(true);
-                  return;
-                }
-              }
-            } catch (error) {
-              console.warn('Tesseract OCR failed:', error);
-            }
-            
-            // If Tesseract fails or returns nothing, use fallback
-            await performFallbackExtraction(imageBase64);
-            resolve(true);
-          };
-          
-          script.onerror = () => {
-            console.warn('Failed to load Tesseract library');
-            performFallbackExtraction(imageBase64).then(() => resolve(true));
-          };
-          
-          document.head.appendChild(script);
-        });
-      }
-    } catch (error) {
-      console.warn('Tesseract loading failed:', error);
+      const worker = await createWorker('eng');
+      const { data: { text } } = await worker.recognize(imageBase64);
+      await worker.terminate();
+      return text;
+    } catch (e) {
+      console.error('Tesseract JS error:', e);
+      return '';
     }
-
-    // If Tesseract unavailable, use fallback extraction
-    await performFallbackExtraction(imageBase64);
-  };
-
-  const performFallbackExtraction = async (imageBase64: string) => {
-    setOcrText('🔄 Using smart image analysis...');
-    
-    try {
-      // Use smart extraction with image enhancement
-      const result = await smartExtractText(imageBase64, {
-        grayscale: true,
-        contrast: 2.5,
-        brightness: 1.2,
-        threshold: 0.3,
-      });
-
-      if (result.text && result.text.trim().length > 0) {
-        setOcrText(result.text);
-        setExtractedText(result.text);
-        
-        // Extract structured data from patterns
-        const { amounts, dates, merchants } = result.patterns;
-        const confidence = calculateExtractionConfidence(result.patterns);
-
-        // Prepare extracted data
-        const description = merchants.length > 0 ? merchants[0] : 'Receipt';
-        const amount = amounts.length > 0 ? amounts[0].value : 0;
-        const date = dates.length > 0 ? dates[0] : new Date().toISOString().split('T')[0];
-        const category = classifyExpense(result.text).category;
-
-        setFormData({
-          Description: description,
-          Amount: amount,
-          Category: category,
-          Date: date,
-          PaymentMethod: 'Cash',
-        });
-
-        if (confidence > 50) {
-          toast.success(`✓ Text analyzed! (${confidence.toFixed(0)}% confidence)`);
-        } else {
-          toast.info(`Analyzed with ${confidence.toFixed(0)}% confidence - please verify`);
-        }
-        return;
-      }
-    } catch (error) {
-      console.warn('Smart extraction failed:', error);
-    }
-
-    // Canvas-based extraction as last resort
-    try {
-      const canvasText = await extractTextFromCanvas(imageBase64);
-      if (canvasText.trim().length > 0) {
-        setOcrText(canvasText);
-        setExtractedText(canvasText);
-        const extracted = fallbackRegexExtraction(canvasText);
-        setFormData(extracted);
-        toast.success('✓ Image analyzed successfully!');
-        return;
-      }
-    } catch (canvasError) {
-      console.warn('Canvas extraction failed:', canvasError);
-    }
-
-    // Last resort: use regex patterns on simulated data
-    throw new Error('All OCR methods failed - using manual entry');
   };
 
   const extractTextFromCanvas = (imageBase64: string): Promise<string> => {

@@ -1,0 +1,48 @@
+{
+  "title": "Expense OCR Pipeline",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Average OCR Word Confidence",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ocr_word_confidence_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum(rate(ocr_word_confidence_bucket[5m])) by (le))",
+          "legendFormat": "p90"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "OCR Processing Latency (seconds)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ocr_processing_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "OCR Failure Rate",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(ocr_requests_total{status=\"error\"}[5m])) / sum(rate(ocr_requests_total[5m]))",
+          "legendFormat": "failure_rate"
+        }
+      ]
+    }
+  ],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s"
+}

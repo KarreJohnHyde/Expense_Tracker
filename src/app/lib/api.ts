@@ -89,6 +89,38 @@ function saveLocalBudgets(budgets: Budget[]) {
   localStorage.setItem(getDynamicKey(STORAGE_KEYS.BUDGETS), JSON.stringify(budgets));
 }
 
+const triggerIntegrations = async (expense: Expense, action: string) => {
+  try {
+     const whatsappNumber = localStorage.getItem('integration_whatsapp');
+     const sheetId = localStorage.getItem('integration_sheet_id');
+
+     if (whatsappNumber) {
+        fetch(`${EDGE_API_URL}/integrations-messaging`, {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+              action: 'notify',
+              provider: 'whatsapp',
+              to: whatsappNumber,
+              message: `*Expense Added*\nDescription: ${expense.description}\nAmount: ${expense.amount}\nCategory: ${expense.category}`
+           })
+        }).catch(() => {});
+     }
+
+     if (sheetId) {
+        fetch(`${EDGE_API_URL}/integrations-sheets`, {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+              action: 'append_row',
+              sheetId: sheetId,
+              payload: [expense]
+           })
+        }).catch(() => {});
+     }
+  } catch(e) {}
+};
+
 export const api = {
   getExpenses: async () => {
     try {
@@ -112,12 +144,14 @@ export const api = {
       if (resp.ok) {
         const newExpense = await resp.json();
         saveLocalExpenses([normalizeExpense(newExpense as Expense), ...getLocalExpenses()]);
+        triggerIntegrations(newExpense as Expense, 'add');
         return newExpense;
       }
     } catch {}
     // Fallback
     const newLocal = normalizeExpense({ ...expense, id: `exp_${Date.now()}` } as Expense);
     saveLocalExpenses([newLocal, ...getLocalExpenses()]);
+    triggerIntegrations(newLocal, 'add');
     return newLocal;
   },
   

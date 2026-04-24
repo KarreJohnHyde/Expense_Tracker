@@ -1,0 +1,61 @@
+service: expense-ocr-api
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 30
+  logRetentionInDays: 14
+  environment:
+    RECEIPT_UPLOAD_BUCKET: ${self:custom.receiptBucket}
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+    OCR_WORKER_URL: ${env:OCR_WORKER_URL, ''}
+    OCR_CLI_COMMAND: ${env:OCR_CLI_COMMAND, 'python python_worker/app/cli_ocr.py'}
+    MAX_FILE_BYTES: '12582912'
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+          Resource:
+            - arn:aws:s3:::${self:custom.receiptBucket}/*
+
+custom:
+  receiptBucket: expense-ocr-${sls:stage}-${aws:accountId}
+
+functions:
+  ocrApi:
+    handler: ../../backend/src/app.handler
+    events:
+      - httpApi:
+          path: /health
+          method: GET
+      - httpApi:
+          path: /ocr/upload-url
+          method: POST
+      - httpApi:
+          path: /ocr/process-image
+          method: POST
+
+resources:
+  Resources:
+    ReceiptUploadsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.receiptBucket}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+        VersioningConfiguration:
+          Status: Enabled

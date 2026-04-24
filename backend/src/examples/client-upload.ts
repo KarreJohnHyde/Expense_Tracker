@@ -35,7 +35,12 @@ export async function processUploadedImage(s3Bucket: string, s3Key: string): Pro
   const response = await fetch(`${API_BASE_URL}/ocr/process-image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ s3_bucket: s3Bucket, s3_key: s3Key }),
+    body: JSON.stringify({
+      s3_bucket: s3Bucket,
+      s3_key: s3Key,
+      source_type: 'upload',
+      lang_hints: ['eng', 'hin', 'tam', 'tel', 'nld', 'fra', 'chi_sim', 'jpn', 'kor'],
+    }),
   });
 
   if (!response.ok) {
@@ -49,6 +54,8 @@ export async function processUploadedImage(s3Bucket: string, s3Key: string): Pro
 export async function processMultipartImage(file: File): Promise<OcrProcessResponse> {
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('source_type', 'upload');
+  formData.append('lang_hints', 'eng,hin,tam,tel,nld,fra,chi_sim,jpn,kor');
 
   const response = await fetch(`${API_BASE_URL}/ocr/process-image`, {
     method: 'POST',

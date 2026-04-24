@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -28,6 +29,7 @@ import { api } from '../lib/api';
 import { FileText } from 'lucide-react';
 
 export default function Profile() {
+  const { t } = useTranslation();
   const { currency, formatCurrency } = useCurrency();
   const [user, setUser] = useState<User | null>(null);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
@@ -196,12 +198,12 @@ export default function Profile() {
 
   const getAccountTypeName = (type: BankAccount['accountType']) => {
     const names = {
-      savings: 'Savings Account',
-      current: 'Current Account',
-      credit_card: 'Credit Card',
-      debit_card: 'Debit Card',
-      upi: 'UPI',
-      net_banking: 'Net Banking',
+      savings: t('profile.account_types.savings'),
+      current: t('profile.account_types.current'),
+      credit_card: t('profile.account_types.credit_card'),
+      debit_card: t('profile.account_types.debit_card'),
+      upi: t('profile.account_types.upi'),
+      net_banking: t('profile.account_types.net_banking'),
     };
     return names[type];
   };
@@ -214,14 +216,14 @@ export default function Profile() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t('profile.title')}</h1>
         <p className="text-muted-foreground">
-          Manage your account and financial information
+          {t('profile.desc')}
         </p>
       </div>
       <div className="flex gap-4">
           <Button onClick={handleExportPDF} className="bg-emerald-600 hover:bg-emerald-700 shadow-md">
-             <FileText className="size-4 mr-2" /> Generate Official Tax PDF
+             <FileText className="size-4 mr-2" /> {t('profile.tax_report')}
           </Button>
       </div>
 
@@ -233,18 +235,18 @@ export default function Profile() {
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <UserIcon className="size-5" />
-                  Personal Information
+                  {t('profile.personal_info')}
                 </CardTitle>
-                <CardDescription>Your account details</CardDescription>
+                <CardDescription>{t('profile.personal_info_desc')}</CardDescription>
               </div>
               <Button variant="outline" size="sm" onClick={() => setIsEditing(!isEditing)}>
-                {isEditing ? 'Cancel Edit' : 'Edit Profile'}
+                {isEditing ? t('profile.cancel_edit') : t('profile.edit_profile')}
               </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label>Full Name</Label>
+              <Label>{t('profile.full_name')}</Label>
               <Input 
                 value={editForm.fullName} 
                 onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
@@ -253,12 +255,12 @@ export default function Profile() {
             </div>
 
             <div className="space-y-2">
-              <Label>Username</Label>
+              <Label>{t('profile.username')}</Label>
               <Input value={user.username} disabled />
             </div>
 
             <div className="space-y-2">
-              <Label>Email</Label>
+              <Label>{t('profile.email')}</Label>
               <Input 
                 value={editForm.email} 
                 onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
@@ -267,12 +269,12 @@ export default function Profile() {
             </div>
 
             <div className="space-y-2">
-              <Label>User ID</Label>
+              <Label>{t('profile.user_id')}</Label>
               <Input value={user.id} disabled className="font-mono text-xs" />
             </div>
 
             <div className="space-y-2">
-              <Label>Member Since</Label>
+              <Label>{t('profile.member_since')}</Label>
               <Input 
                 value={new Date(user.createdAt).toLocaleDateString('en-IN', { 
                   year: 'numeric', 
@@ -286,11 +288,11 @@ export default function Profile() {
             <div className="pt-4 border-t flex items-center justify-between">
               <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
                 <CheckCircle2 className="size-4" />
-                <span className="text-sm font-medium">Account Verified</span>
+                <span className="text-sm font-medium">{t('profile.verified')}</span>
               </div>
               {isEditing && (
                 <Button onClick={handleSaveProfile} size="sm">
-                  Save Changes
+                  {t('profile.save_changes')}
                 </Button>
               )}
             </div>
@@ -302,33 +304,33 @@ export default function Profile() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Shield className="size-5" />
-              Account Statistics
+              {t('profile.stats')}
             </CardTitle>
-            <CardDescription>Your account overview</CardDescription>
+            <CardDescription>{t('profile.stats_desc')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-200 dark:border-purple-800">
-                <p className="text-sm text-muted-foreground">Total Accounts</p>
+                <p className="text-sm text-muted-foreground">{t('profile.total_accounts')}</p>
                 <p className="text-2xl font-bold">{accounts.length}</p>
               </div>
 
               <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-200 dark:border-blue-800">
-                <p className="text-sm text-muted-foreground">Total Balance</p>
+                <p className="text-sm text-muted-foreground">{t('profile.total_balance')}</p>
                 <p className="text-2xl font-bold">
                   {formatCurrency(accounts.reduce((sum, acc) => sum + acc.balance, 0))}
                 </p>
               </div>
 
               <div className="p-4 rounded-lg bg-green-500/10 border border-green-200 dark:border-green-800">
-                <p className="text-sm text-muted-foreground">Bank Accounts</p>
+                <p className="text-sm text-muted-foreground">{t('profile.bank_accounts')}</p>
                 <p className="text-2xl font-bold">
                   {accounts.filter(a => a.accountType === 'savings' || a.accountType === 'current').length}
                 </p>
               </div>
 
               <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-200 dark:border-orange-800">
-                <p className="text-sm text-muted-foreground">Cards & UPI</p>
+                <p className="text-sm text-muted-foreground">{t('profile.cards_upi')}</p>
                 <p className="text-2xl font-bold">
                   {accounts.filter(a => ['credit_card', 'debit_card', 'upi'].includes(a.accountType)).length}
                 </p>
@@ -337,8 +339,8 @@ export default function Profile() {
 
             <div className="pt-4 space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Account Security</span>
-                <span className="font-semibold text-green-600">High</span>
+                <span className="text-muted-foreground">{t('profile.security')}</span>
+                <span className="font-semibold text-green-600">{t('profile.high')}</span>
               </div>
               <div className="w-full bg-muted rounded-full h-2">
                 <div className="bg-green-600 h-2 rounded-full" style={{ width: '90%' }} />
@@ -354,22 +356,22 @@ export default function Profile() {
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <Shield className="size-5 text-orange-500" />
-                  Security Vault Settings
+                  {t('profile.vault')}
                 </CardTitle>
-                <CardDescription>Configure your application lock PIN</CardDescription>
+                <CardDescription>{t('profile.vault_desc')}</CardDescription>
               </div>
               {!isPinEditing ? (
-                 <Button variant="outline" size="sm" onClick={() => setIsPinEditing(true)}>Change PIN</Button>
+                 <Button variant="outline" size="sm" onClick={() => setIsPinEditing(true)}>{t('profile.change_pin')}</Button>
               ) : (
-                 <Button variant="ghost" size="sm" onClick={() => setIsPinEditing(false)}>Cancel</Button>
+                 <Button variant="ghost" size="sm" onClick={() => setIsPinEditing(false)}>{t('profile.cancel_edit')}</Button>
               )}
             </div>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-6">
                <div className="space-y-1">
-                  <p className="text-sm font-medium">Vault Status</p>
-                  <Badge variant="outline" className="text-green-600 border-green-600/20 bg-green-600/10">Active & Encrypted</Badge>
+                  <p className="text-sm font-medium">{t('profile.vault_status')}</p>
+                  <Badge variant="outline" className="text-green-600 border-green-600/20 bg-green-600/10">{t('profile.encrypted')}</Badge>
                </div>
                <div className="h-10 w-px bg-border"></div>
                <div className="flex-1 max-w-xs">
@@ -404,15 +406,15 @@ export default function Profile() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Building2 className="size-5" />
-                Financial Accounts
+                {t('profile.financial_accounts')}
               </CardTitle>
-              <CardDescription>Manage your bank accounts, cards, and payment methods</CardDescription>
+              <CardDescription>{t('profile.financial_accounts_desc')}</CardDescription>
             </div>
             <Dialog open={isAddAccountOpen} onOpenChange={setIsAddAccountOpen}>
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="size-4 mr-2" />
-                  Add Account
+                  {t('profile.add_account')}
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
@@ -550,10 +552,10 @@ export default function Profile() {
           {accounts.length === 0 ? (
             <div className="text-center py-12">
               <Building2 className="size-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground mb-4">No accounts added yet</p>
+              <p className="text-muted-foreground mb-4">{t('profile.no_accounts')}</p>
               <Button onClick={() => setIsAddAccountOpen(true)}>
                 <Plus className="size-4 mr-2" />
-                Add Your First Account
+                {t('profile.add_first')}
               </Button>
             </div>
           ) : (
@@ -600,14 +602,14 @@ export default function Profile() {
 
                       {account.upiId && (
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">UPI ID</span>
+                          <span className="text-muted-foreground">{t('profile.upi_id')}</span>
                           <span className="font-mono">{account.upiId}</span>
                         </div>
                       )}
 
                       {account.cardNumber && (
                         <div className="flex justify-between items-center">
-                          <span className="text-muted-foreground">Card Number</span>
+                          <span className="text-muted-foreground">{t('profile.card_number')}</span>
                           <div className="flex items-center gap-2">
                             <span className="font-mono">
                               {showCardDetails[account.id] 
@@ -632,13 +634,13 @@ export default function Profile() {
 
                       {account.expiryDate && showCardDetails[account.id] && (
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Expires</span>
+                          <span className="text-muted-foreground">{t('profile.expires')}</span>
                           <span className="font-mono">{account.expiryDate}</span>
                         </div>
                       )}
 
                       <div className="flex justify-between pt-2 border-t">
-                        <span className="text-muted-foreground">Balance</span>
+                        <span className="text-muted-foreground">{t('profile.balance')}</span>
                         <span className="font-bold text-green-600">
                           {formatCurrency(account.balance)}
                         </span>
@@ -653,7 +655,7 @@ export default function Profile() {
                         onClick={() => handleDeleteAccount(account.id)}
                       >
                         <Trash2 className="size-3 mr-2" />
-                        Remove
+                        {t('profile.remove')}
                       </Button>
                     </div>
                   </CardContent>

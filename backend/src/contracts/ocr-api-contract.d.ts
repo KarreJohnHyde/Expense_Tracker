@@ -1,12 +1,27 @@
 export interface OcrWord {
   text: string;
+  normalized_text?: string;
   conf: number;
+  confidence?: number;
+  line_id?: number;
   bbox: {
     x: number;
     y: number;
     width: number;
     height: number;
   };
+}
+
+export interface OcrRawToken {
+  text: string;
+  bbox: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  confidence: number;
+  line_id?: number;
 }
 
 export interface OcrLineItem {
@@ -20,6 +35,9 @@ export interface OcrLineItem {
 export interface OcrQrResult {
   type: 'qr' | 'barcode';
   data: string;
+  decoded_text?: string;
+  format?: string;
+  parsed_payload?: Record<string, unknown> | null;
   bbox?: {
     x: number;
     y: number;
@@ -28,14 +46,40 @@ export interface OcrQrResult {
   };
 }
 
+export interface OcrParsedFields {
+  merchant: string | null;
+  date: string | null;
+  invoice_no: string | null;
+  total: number;
+  tax: number | null;
+  currency: string | null;
+  line_items: OcrLineItem[];
+  raw_text: string;
+}
+
+export interface OcrFieldConfidences {
+  merchant: number;
+  date: number;
+  invoice_no: number;
+  total: number;
+  tax: number;
+  qr: number;
+}
+
 export interface OcrProcessResponse {
+  source_type?: string;
   raw_text: string;
   corrected_text: string;
+  raw_tokens: OcrRawToken[];
+  parsed_fields: OcrParsedFields;
+  confidences: OcrFieldConfidences;
   items: OcrLineItem[];
   total: number;
   date: string | null;
   qr: OcrQrResult[];
+  qr_payload?: OcrQrResult | null;
   words: OcrWord[];
+  processing_log: string[];
   processing_time_ms: number;
   job_id: string;
   metadata?: Record<string, unknown>;

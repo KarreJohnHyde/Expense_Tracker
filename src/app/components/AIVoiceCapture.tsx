@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Mic, MicOff, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
-import { classifyExpense } from '../lib/classifier';
+import { parseVoiceExpense } from '../lib/voiceCommands';
 import { api } from '../lib/api';
 
 export function AIVoiceCapture() {
@@ -79,26 +79,23 @@ export function AIVoiceCapture() {
     setProcessing(true);
     toast.info("Extracting insights with Brain.js...");
     try {
-      // Basic AI heuristic for extraction
-      const amountMatches = text.match(/\b\d+(\.\d{1,2})?\b/);
-      let extractedAmount = amountMatches ? parseFloat(amountMatches[0]) : 0;
+      const parsed = parseVoiceExpense(text);
+      const extractedAmount = parsed.amount ? parseFloat(parsed.amount) : 0;
       
       if (!extractedAmount) {
          toast.error("Could not detect any numerical amount in your voice.");
          return;
       }
       
-      const prediction = classifyExpense(text);
-      
       await api.addExpense({
-         description: text.substring(0, 40) + ' (Voice Log)',
+         description: parsed.description || text.substring(0, 40) + ' (Voice Log)',
          amount: extractedAmount,
-         category: prediction.category,
-         paymentMethod: 'Cash',
-         date: new Date().toISOString().split('T')[0],
+         category: parsed.category || 'Others',
+         paymentMethod: parsed.paymentMethod || 'Cash',
+         date: parsed.date || new Date().toISOString().split('T')[0],
          source: 'voice'
       });
-      toast.success("Voice Expense Categorized as: " + prediction.category);
+      toast.success("Voice Expense Categorized as: " + (parsed.category || 'Others'));
     } catch (err) {
       toast.error('Failed to save voice expense');
     } finally {

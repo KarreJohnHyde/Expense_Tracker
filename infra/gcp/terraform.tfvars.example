@@ -1,0 +1,5 @@
+project_id  = "your-gcp-project-id"
+region      = "us-central1"
+worker_image = "ghcr.io/your-org/expense-ocr-worker:latest"
+api_image    = "ghcr.io/your-org/expense-ocr-node-api:latest"
+# kms_key_name = "projects/.../locations/.../keyRings/.../cryptoKeys/..."

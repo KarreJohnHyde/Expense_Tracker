@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AddExpenseDialog } from '../components/AddExpenseDialog';
 import { ExpenseList } from '../components/ExpenseList';
 import { AIInsights } from '../components/AIInsights';
@@ -37,6 +38,7 @@ interface Expense {
 }
 
 export default function Dashboard() {
+  const { t, i18n } = useTranslation();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [filteredExpenses, setFilteredExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +54,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const user = auth.getCurrentUser();
   const now = new Date();
-  const greeting = now.getHours() < 12 ? 'Good Morning' : now.getHours() < 17 ? 'Good Afternoon' : 'Good Evening';
+  const greetingKey = now.getHours() < 12 ? 'dashboard.greeting' : now.getHours() < 17 ? 'dashboard.greeting_afternoon' : 'dashboard.greeting_evening';
+  const greeting = t(greetingKey);
 
   useEffect(() => {
     loadExpenses();
@@ -239,27 +242,27 @@ export default function Dashboard() {
           <div>
             <div className="flex items-center gap-2 text-white/60 text-xs font-medium mb-2">
               <Calendar className="size-3.5" />
-              {now.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              {now.toLocaleDateString(i18n.language === 'en' ? 'en-IN' : i18n.language, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </div>
             <h1 className="text-2xl lg:text-3xl font-bold text-white tracking-tight">
-              {greeting}, <span style={{ color: '#00d4aa' }}>{user?.username || 'there'}</span>! 👋
+              {greeting}, <span style={{ color: '#00d4aa' }}>{user?.username || t('dashboard.welcome')}</span>! 👋
             </h1>
             <div className="mt-3 flex items-center gap-4 flex-wrap">
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
                 style={{ background: 'rgba(0,212,170,0.15)', border: '1px solid rgba(0,212,170,0.25)', color: '#00d4aa' }}>
                 <TrendingUp className="size-3" />
-                ₹{totalThisMonth.toLocaleString('en-IN')} this month
+                ₹{totalThisMonth.toLocaleString('en-IN')} {t('dashboard.this_month')}
               </div>
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
                 style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.75)' }}>
                 <Zap className="size-3" />
-                {monthlyTransactions} transactions
+                {monthlyTransactions} {t('dashboard.transactions')}
               </div>
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-transform hover:scale-105"
                 onClick={() => navigate('/reconciliation')}
                 style={{ background: 'rgba(57,153,255,0.15)', border: '1px solid rgba(57,153,255,0.25)', color: '#3999ff' }}>
                 <ShieldCheck className="size-3" />
-                {trustScore}% Trust Score
+                {trustScore}% {t('dashboard.trust_score')}
               </div>
             </div>
           </div>
@@ -268,7 +271,7 @@ export default function Dashboard() {
             <div className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium"
               style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.70)' }}>
               <Sparkles className="size-3.5" style={{ color: '#00d4aa' }} />
-              AI insights active
+              {t('dashboard.ai_insights')}
             </div>
             <VoiceExpenseInput
               onTranscribed={(_text, data) => {
@@ -289,9 +292,9 @@ export default function Dashboard() {
       {/* ── Quick Actions ─────────────────────────────────────────────── */}
       <div className="animate-fade-in-up-delay-1 flex flex-wrap gap-2">
         {[
-          { icon: FileSpreadsheet, label: 'Export CSV',    action: exportToCSV },
-          { icon: FileText,        label: 'Export JSON',   action: exportToJSON },
-          { icon: Camera,          label: 'Scan Receipt',  action: () => navigate('/scan-receipt') },
+          { icon: FileSpreadsheet, label: t('dashboard.export_csv'),    action: exportToCSV },
+          { icon: FileText,        label: t('dashboard.export_json'),   action: exportToJSON },
+          { icon: Camera,          label: t('dashboard.scan_receipt'),  action: () => navigate('/scan-receipt') },
         ].map(({ icon: Icon, label, action }) => (
           <Button
             key={label}
@@ -315,11 +318,11 @@ export default function Dashboard() {
       <div className="animate-fade-in-up-delay-2 glass-card border border-border/40 p-4">
         <div className="flex items-center gap-2 mb-3">
           <Filter className="size-3.5 text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Filters</span>
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('dashboard.filters')}</span>
           {hasActiveFilters && (
             <span className="ml-auto text-xs text-primary cursor-pointer hover:underline"
               onClick={() => { setSearchQuery(''); setCategoryFilter('all'); setDateFilter('all'); setPaymentFilter('all'); }}>
-              Clear all
+              {t('dashboard.clear_all')}
             </span>
           )}
         </div>
@@ -328,7 +331,7 @@ export default function Dashboard() {
           <div className="relative lg:col-span-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
             <Input
-              placeholder="Search expenses…"
+              placeholder={t('dashboard.search')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="pl-9 bg-transparent border-border/50 focus:border-primary/40 transition-colors"
@@ -337,20 +340,20 @@ export default function Dashboard() {
 
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
             <SelectTrigger className="bg-transparent border-border/50">
-              <SelectValue placeholder="All Categories" />
+              <SelectValue placeholder={t('dashboard.all_categories')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="all">{t('dashboard.all_categories')}</SelectItem>
               {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
             </SelectContent>
           </Select>
 
           <Select value={dateFilter} onValueChange={setDateFilter}>
             <SelectTrigger className="bg-transparent border-border/50">
-              <SelectValue placeholder="All Time" />
+              <SelectValue placeholder={t('dashboard.all_time')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Time</SelectItem>
+              <SelectItem value="all">{t('dashboard.all_time')}</SelectItem>
               <SelectItem value="today">Today</SelectItem>
               <SelectItem value="week">This Week</SelectItem>
               <SelectItem value="month">This Month</SelectItem>
@@ -360,7 +363,7 @@ export default function Dashboard() {
 
           <Select value={paymentFilter} onValueChange={setPaymentFilter}>
             <SelectTrigger className="bg-transparent border-border/50">
-              <SelectValue placeholder="Payment Method" />
+              <SelectValue placeholder={t('dashboard.payment_method')} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Methods</SelectItem>
@@ -371,7 +374,7 @@ export default function Dashboard() {
 
         {hasActiveFilters && (
           <p className="mt-2.5 text-xs text-muted-foreground">
-            Showing <span className="text-foreground font-medium">{filteredExpenses.length}</span> of {expenses.length} expenses
+            {t('dashboard.showing')} <span className="text-foreground font-medium">{filteredExpenses.length}</span> {t('dashboard.of')} {expenses.length} {t('dashboard.expenses')}
           </p>
         )}
       </div>
@@ -405,12 +408,12 @@ export default function Dashboard() {
                     <Repeat className="size-6" />
                  </div>
                  <div>
-                    <p className="font-bold text-amber-900 dark:text-amber-100">Recurring Payments Detected</p>
-                    <p className="text-sm text-amber-700 dark:text-amber-400">AI found {unconfirmedCount} potential subscriptions. Confirm them to improve tracking.</p>
+                    <p className="font-bold text-amber-900 dark:text-amber-100">{t('dashboard.recurring_detected')}</p>
+                    <p className="text-sm text-amber-700 dark:text-amber-400">{t('dashboard.recurring_desc', { count: unconfirmedCount })}</p>
                  </div>
               </div>
               <Button variant="ghost" className="text-amber-600 hover:text-amber-700 hover:bg-transparent">
-                 Review <ArrowRight className="size-4 ml-2" />
+                 {t('dashboard.review')} <ArrowRight className="size-4 ml-2" />
               </Button>
            </div>
         )}
