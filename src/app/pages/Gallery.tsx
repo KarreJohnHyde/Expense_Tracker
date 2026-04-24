@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Card, CardTitle, CardDescription } from '../components/ui/card';
+import { Card, CardTitle, CardDescription, CardHeader, CardContent } from '../components/ui/card';
 import { api, Expense } from '../lib/api';
 import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
@@ -31,6 +31,8 @@ export default function Gallery() {
   const [editing, setEditing] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
   const [showFilterOptions, setShowFilterOptions] = useState(false);
+  const [isEditingOcr, setIsEditingOcr] = useState(false);
+  const [localExtractedText, setLocalExtractedText] = useState('');
   
   const [editForm, setEditForm] = useState<Partial<Expense>>({});
 
@@ -151,6 +153,28 @@ export default function Gallery() {
     }
   };
 
+  const handleUpdateOcrText = async () => {
+    if (!lightboxExpense) return;
+    try {
+      setLoading(true);
+      const updatedScanData = {
+        ...lightboxExpense.scanData,
+        rawText: localExtractedText
+      };
+      await api.updateExpense(lightboxExpense.id, { 
+        scanData: updatedScanData as any
+      });
+      
+      setExpenses(prev => prev.map(e => e.id === lightboxExpense.id ? { ...e, scanData: updatedScanData as any } : e));
+      setIsEditingOcr(false);
+      toast.success('OCR text updated in cloud!');
+    } catch {
+      toast.error('Failed to update OCR text');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDownload = (expense: Expense) => {
     if (!expense.receiptImage) return;
     const link = document.createElement('a');
@@ -214,6 +238,143 @@ export default function Gallery() {
         ))}
       </div>
 
+      {lightboxExpense && lightboxIdx !== null && (
+        <div id="details-pane" className="animate-fade-in my-6 bg-card border-4 border-primary/20 rounded-2xl shadow-xl overflow-hidden flex flex-col md:flex-row max-h-[800px]">
+          {/* Image Pane */}
+          <div className={`flex-1 bg-black/5 flex items-center justify-center p-4 border-r-4 border-primary/10 ${isZoomed ? 'overflow-auto block' : 'overflow-hidden'}`}>
+             {lightboxExpense.receiptImage ? (
+                <img 
+                    src={lightboxExpense.receiptImage} 
+                    alt="receipt" 
+                    onClick={(e) => { e.stopPropagation(); setIsZoomed(!isZoomed); }}
+                    className={`shadow-lg rounded-xl cursor-zoom-in transition-all duration-300 border-4 border-white ${isZoomed ? 'max-w-none w-auto' : 'max-w-full max-h-[60vh] object-contain'}`} 
+                />
+             ) : (
+                <div className="text-muted-foreground"><FileText className="size-20 opacity-30 mx-auto"/><p className="mt-4">No Image</p></div>
+             )}
+          </div>
+          
+          {/* Context Pane */}
+          <div className="w-full md:w-[450px] p-8 overflow-y-auto flex flex-col bg-card">
+             <div className="flex justify-between items-start mb-6">
+               <div>
+                  <h2 className="font-bold text-2xl">Receipt Details</h2>
+                  <p className="text-sm text-muted-foreground">ID: {lightboxExpense.id.split('_')[0]}...</p>
+               </div>
+               <div className="flex gap-1 shrink-0 bg-muted/50 p-1 rounded-lg">
+                  {lightboxExpense?.receiptImage && (
+                     <Button variant="ghost" size="icon" onClick={() => setShowFilterOptions(true)} title="Enhance Image"><Wand2 className="size-4 text-purple-500" /></Button>
+                  )}
+                  <Button variant="ghost" size="icon" onClick={() => setEditing(!editing)}><Edit2 className="size-4" /></Button>
+                  <Button variant="ghost" size="icon" onClick={() => setShowOcrText(!showOcrText)}><Eye className="size-4" /></Button>
+                  <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteExpense(lightboxExpense.id)}><Trash2 className="size-4" /></Button>
+                  <Button variant="ghost" size="icon" onClick={() => {setLightboxIdx(null); setEditing(false); window.scrollTo({top:0, behavior:'smooth'});}}><X className="size-4" /></Button>
+               </div>
+             </div>
+
+             {showOcrText && lightboxExpense.scanData ? (
+               <div className="flex-1 space-y-4">
+                  <h3 className="font-semibold text-sm flex gap-2"><ScanLine className="size-4 text-primary" /> RAW API Extraction</h3>
+                  <pre className="text-xs bg-muted p-4 rounded-xl font-mono overflow-auto flex-1 max-h-96 border-2 shadow-inner">
+                     {lightboxExpense.scanData.rawText}
+                  </pre>
+               </div>
+             ) : (
+               <div className="space-y-6 flex-1">
+                 <div className="bg-muted/30 p-4 rounded-xl border">
+                   <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Description</label>
+                   {editing ? <Input className="mt-1" value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} /> : <p className="font-medium text-xl mt-1">{lightboxExpense.description}</p>}
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                   <div className="bg-muted/30 p-4 rounded-xl border">
+                     <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Amount</label>
+                     {editing ? <Input className="mt-1" type="number" value={editForm.amount} onChange={e => setEditForm({...editForm, amount: parseFloat(e.target.value)})} /> : <p className="font-bold text-emerald-600 text-2xl mt-1">{formatCurrency(lightboxExpense.amount)}</p>}
+                   </div>
+                   <div className="bg-muted/30 p-4 rounded-xl border">
+                     <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Date</label>
+                     <p className="font-medium mt-1 text-lg">{lightboxExpense.date}</p>
+                   </div>
+                 </div>
+                 <div className="bg-muted/30 p-4 rounded-xl border">
+                   <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Category</label>
+                   {editing ? <Input className="mt-1" value={editForm.category} onChange={e => setEditForm({...editForm, category: e.target.value})} /> : <Badge variant="outline" className="mt-2 text-base px-3 py-1 bg-white dark:bg-black/40 shadow-sm">{lightboxExpense.category}</Badge>}
+                 </div>
+                 
+                 {editing && (
+                   <Button size="lg" className="w-full mt-4 bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md" onClick={handleUpdateExpense}><Save className="mr-2 size-5" /> Save Cloud Changes</Button>
+                 )}
+               </div>
+             )}
+          </div>
+        </div>
+      )}
+
+      {/* OCR Extracted Text Section (Below the main pane) */}
+      {lightboxExpense && lightboxExpense.scanData && (
+        <Card className="mt-8 border-t-4 border-t-amber-500 shadow-xl overflow-hidden animate-fade-in">
+          <CardHeader className="bg-amber-50/50 dark:bg-amber-900/10 border-b">
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle className="text-xl flex items-center gap-2">
+                  <FileText className="text-amber-500 size-6" />
+                  📝 OCR Extracted Content
+                </CardTitle>
+                <CardDescription>
+                  Full text detected from this {lightboxExpense.scanData.type === 'ocr_receipt' ? 'receipt' : 'scan'}.
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  variant={isEditingOcr ? 'default' : 'outline'} 
+                  size="sm"
+                  onClick={() => setIsEditingOcr(!isEditingOcr)}
+                  className={isEditingOcr ? 'bg-amber-600 hover:bg-amber-700 text-white' : ''}
+                >
+                  <Edit2 className="size-4 mr-2" />
+                  {isEditingOcr ? 'Finish Editing' : 'Edit Text'}
+                </Button>
+                {isEditingOcr && (
+                  <Button 
+                    variant="default" 
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={handleUpdateOcrText}
+                  >
+                    <Save className="size-4 mr-2" />
+                    Save Cloud Changes
+                  </Button>
+                )}
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  onClick={() => { setLocalExtractedText(''); toast.success('Buffer cleared locally'); }}
+                >
+                  <Trash2 className="size-4 mr-2" />
+                  Clear
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {isEditingOcr ? (
+              <textarea
+                className="w-full h-96 p-8 font-mono text-sm bg-amber-50/30 dark:bg-slate-900 focus:outline-none resize-y leading-relaxed"
+                value={localExtractedText}
+                onChange={(e) => setLocalExtractedText(e.target.value)}
+                placeholder="Paste or edit extracted text here..."
+              />
+            ) : (
+              <div className="bg-white dark:bg-slate-950 p-8 h-96 overflow-y-auto">
+                <pre className="whitespace-pre-wrap font-mono text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                  {localExtractedText || 'No text content available for this record.'}
+                </pre>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {filtered.length === 0 ? (
         <Card className="border-dashed flex flex-col items-center justify-center p-16 text-muted-foreground">
           <FileText className="size-12 mb-4 opacity-40" />
@@ -225,11 +386,14 @@ export default function Gallery() {
           {filtered.map((expense, idx) => {
             const BadgeSource = getSourceBadge(expense);
             return (
-              <Card key={expense.id} className="overflow-hidden group cursor-pointer hover:shadow-lg transition-transform" onClick={() => {
+              <Card key={expense.id} className={`overflow-hidden group cursor-pointer transition-transform border-4 border-transparent hover:border-primary/40 ${lightboxIdx === idx ? 'border-primary shadow-xl scale-[1.02]' : ''}`} onClick={() => {
                  setLightboxIdx(idx); 
                  setEditForm({ description: expense.description, amount: expense.amount, category: expense.category }); 
+                 setLocalExtractedText(expense.scanData?.rawText || '');
+                 setIsEditingOcr(false);
+                 setTimeout(() => document.getElementById('details-pane')?.scrollIntoView({ behavior: 'smooth' }), 100);
               }}>
-                <div className="relative h-52 bg-slate-900 border-b">
+                <div className="relative h-52 bg-slate-900 border-b-2">
                   {expense.receiptImage ? (
                     <img src={expense.receiptImage} alt={expense.description} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                   ) : (
@@ -283,79 +447,7 @@ export default function Gallery() {
         </div>
       )}
 
-      {/* Lightbox */}
-      {lightboxExpense && lightboxIdx !== null && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => { setLightboxIdx(null); setEditing(false); setIsZoomed(false); }}>
-          <div className="bg-background border rounded-xl max-w-4xl w-full flex flex-col md:flex-row overflow-hidden max-h-[85vh]" onClick={e => e.stopPropagation()}>
-            {/* Image Pane */}
-            <div className={`flex-1 bg-black/5 flex items-center justify-center p-4 ${isZoomed ? 'overflow-auto block' : 'overflow-hidden'}`}>
-               {lightboxExpense.receiptImage ? (
-                  <img 
-                      src={lightboxExpense.receiptImage} 
-                      alt="receipt" 
-                      onClick={(e) => { e.stopPropagation(); setIsZoomed(!isZoomed); }}
-                      className={`shadow-md cursor-zoom-in transition-all duration-300 ${isZoomed ? 'max-w-none w-auto' : 'max-w-full max-h-[70vh] object-contain'}`} 
-                  />
-               ) : (
-                  <div className="text-muted-foreground"><FileText className="size-20 opacity-30 mx-auto"/><p className="mt-4">No Image</p></div>
-               )}
-            </div>
-            
-            {/* Context Pane */}
-            <div className="w-full md:w-96 p-6 border-l overflow-y-auto flex flex-col bg-card">
-               <div className="flex justify-between items-start mb-6">
-                 <div>
-                    <h2 className="font-bold text-xl">Receipt Details</h2>
-                    <p className="text-sm text-muted-foreground">ID: {lightboxExpense.id.split('_')[0]}...</p>
-                 </div>
-                 <div className="flex gap-1">
-                    {lightboxExpense?.receiptImage && (
-                       <Button variant="ghost" size="icon" onClick={() => setShowFilterOptions(true)} title="Enhance Image"><Wand2 className="size-4 text-purple-500" /></Button>
-                    )}
-                    <Button variant="ghost" size="icon" onClick={() => setEditing(!editing)}><Edit2 className="size-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => setShowOcrText(!showOcrText)}><Eye className="size-4" /></Button>
-                    <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteExpense(lightboxExpense.id)}><Trash2 className="size-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => setLightboxIdx(null)}><X className="size-4" /></Button>
-                 </div>
-               </div>
-
-               {showOcrText && lightboxExpense.scanData ? (
-                 <div className="flex-1 space-y-4">
-                    <h3 className="font-semibold text-sm flex gap-2"><ScanLine className="size-4 text-primary" /> RAW API Extraction</h3>
-                    <pre className="text-xs bg-muted p-3 rounded font-mono overflow-auto h-64 border">
-                       {lightboxExpense.scanData.rawText}
-                    </pre>
-                 </div>
-               ) : (
-                 <div className="space-y-4 flex-1">
-                   <div>
-                     <label className="text-xs text-muted-foreground">Description</label>
-                     {editing ? <Input value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} /> : <p className="font-medium text-lg">{lightboxExpense.description}</p>}
-                   </div>
-                   <div className="grid grid-cols-2 gap-4">
-                     <div>
-                       <label className="text-xs text-muted-foreground">Amount</label>
-                       {editing ? <Input type="number" value={editForm.amount} onChange={e => setEditForm({...editForm, amount: parseFloat(e.target.value)})} /> : <p className="font-bold text-emerald-600 text-lg">{formatCurrency(lightboxExpense.amount)}</p>}
-                     </div>
-                     <div>
-                       <label className="text-xs text-muted-foreground">Date</label>
-                       <p className="font-medium">{lightboxExpense.date}</p>
-                     </div>
-                   </div>
-                   <div>
-                     <label className="text-xs text-muted-foreground">Category</label>
-                     {editing ? <Input value={editForm.category} onChange={e => setEditForm({...editForm, category: e.target.value})} /> : <Badge variant="outline" className="mt-1">{lightboxExpense.category}</Badge>}
-                   </div>
-                   
-                   {editing && (
-                     <Button className="w-full mt-4" onClick={handleUpdateExpense}><Save className="mr-2 size-4" /> Save Cloud Changes</Button>
-                   )}
-                 </div>
-               )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Lightbox moved to top */}
 
       {/* Confirmation Modal */}
       {confirmModal.isOpen && (

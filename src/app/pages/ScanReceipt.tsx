@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
-import { Camera, Upload, Scan, Scale, QrCode, FileText, Settings } from 'lucide-react';
+import { Camera, Upload, Scan, Scale, QrCode, FileText, Settings, Wand2, Save, Crop as CropIcon, Edit2, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { notifyUser } from '../lib/notifications';
 import { Html5QrcodeScanner } from 'html5-qrcode';
@@ -14,6 +14,8 @@ import { classifyExpense } from '../lib/classifier';
 import { supabase } from '../../lib/supabaseClient';
 import { smartExtractText, calculateExtractionConfidence } from '../lib/imageProcessing';
 import { advancedPreprocess, OCR_PRESETS } from '../lib/advancedImageProcessing';
+import { ImageFilter } from '../components/ImageFilter';
+import { ImageCropper } from '../components/ImageCropper';
 
 interface ExtractedReceiptInfo {
   Description: string;
@@ -22,6 +24,13 @@ interface ExtractedReceiptInfo {
   Date: string;
   PaymentMethod: string;
 }
+
+const SHARED_VIDEO_CONSTRAINTS = {
+  facingMode: { exact: "environment" },
+  width: { ideal: 1920 },
+  height: { ideal: 1080 },
+  frameRate: { ideal: 30 }
+};
 
 const fallbackRegexExtraction = (rawText: string) => {
   // Text normalization
@@ -125,6 +134,10 @@ export default function ScanReceipt() {
   const [processing, setProcessing] = useState(false);
   const [ocrText, setOcrText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showCropper, setShowCropper] = useState(false);
+  const [extractedText, setExtractedText] = useState('');
+  const [isEditingOcr, setIsEditingOcr] = useState(false);
   
   const webcamRef = useRef<Webcam>(null);
   const [preprocessing, setPreprocessing] = useState<{
@@ -343,8 +356,8 @@ Timestamp: ${new Date().toLocaleTimeString()}
                 setOcrText('⏳ Processing with Tesseract OCR engine...');
                 const { data: { text } } = await worker.recognize(imageBase64);
                 await worker.terminate();
-                
-                if (text && text.trim().length > 20) {
+                                if (text && text.trim().length > 5) {
+                   setExtractedText(text);
                   setOcrText(text);
                   setFormData(fallbackRegexExtraction(text));
                   toast.success('✓ Text recognized with Tesseract OCR!');
@@ -392,6 +405,7 @@ Timestamp: ${new Date().toLocaleTimeString()}
 
       if (result.text && result.text.trim().length > 0) {
         setOcrText(result.text);
+        setExtractedText(result.text);
         
         // Extract structured data from patterns
         const { amounts, dates, merchants } = result.patterns;
@@ -427,6 +441,7 @@ Timestamp: ${new Date().toLocaleTimeString()}
       const canvasText = await extractTextFromCanvas(imageBase64);
       if (canvasText.trim().length > 0) {
         setOcrText(canvasText);
+        setExtractedText(canvasText);
         const extracted = fallbackRegexExtraction(canvasText);
         setFormData(extracted);
         toast.success('✓ Image analyzed successfully!');
@@ -566,7 +581,7 @@ Timestamp: ${new Date().toLocaleTimeString()}
         source: 'receipt_scan',
         scanData: {
             type: 'ocr_receipt',
-            rawText: ocrText,
+            rawText: extractedText || ocrText,
             capturedAt: new Date().toISOString()
         }
       });
@@ -584,7 +599,13 @@ Timestamp: ${new Date().toLocaleTimeString()}
   useEffect(() => {
       let scanner: Html5QrcodeScanner | null = null;
       if (mode === 'qr') {
-          scanner = new Html5QrcodeScanner("qr-reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
+          scanner = new Html5QrcodeScanner("qr-reader", { 
+              fps: 10, 
+              qrbox: { width: 250, height: 250 },
+              videoConstraints: SHARED_VIDEO_CONSTRAINTS,
+              rememberLastUsedCamera: true,
+              aspectRatio: 1.0
+          }, false);
           scanner.render((decodedText) => {
               setMode('upload');
               setImage('qr_placeholder'); // Not a real image format, but blocks further camera
@@ -636,9 +657,15 @@ Timestamp: ${new Date().toLocaleTimeString()}
         {!image && mode !== 'qr' && (
             <div className="flex flex-col md:flex-row gap-4 justify-center items-center py-10">
                {mode === 'camera' ? (
-                   <div className="flex flex-col items-center gap-4">
-                      <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" className="rounded-xl w-full max-w-md shadow-lg" />
-                      <Button onClick={capturePhoto} size="lg"><Camera className="mr-2"/> Capture Image</Button>
+                   <div className="flex flex-col items-center gap-4 w-full">
+                      <Webcam 
+                        audio={false} 
+                        ref={webcamRef} 
+                        screenshotFormat="image/jpeg" 
+                        videoConstraints={SHARED_VIDEO_CONSTRAINTS}
+                        className="rounded-xl w-full md:w-4/5 max-w-[800px] max-h-[600px] object-contain shadow-2xl border-4 border-primary/10 hover:scale-[1.02] transition-transform duration-300" 
+                      />
+                      <Button onClick={capturePhoto} size="lg" className="w-64 h-12 text-lg shadow-md mt-4"><Camera className="mr-2"/> Capture Image</Button>
                       <Button variant="outline" onClick={() => setMode(null)}>Cancel</Button>
                    </div>
                ) : (
@@ -654,8 +681,8 @@ Timestamp: ${new Date().toLocaleTimeString()}
         )}
 
         {!image && mode === 'qr' && (
-            <div className="py-6 flex flex-col items-center">
-                <div id="qr-reader" className="w-full max-w-sm rounded-xl overflow-hidden shadow-xl border"></div>
+            <div className="py-6 flex flex-col items-center w-full">
+                <div id="qr-reader" className="w-full md:w-3/4 max-w-[600px] rounded-2xl overflow-hidden shadow-2xl border-4 border-primary/20 hover:scale-[1.02] transition-transform duration-300 bg-white"></div>
                 <Button variant="outline" className="mt-6" onClick={() => setMode(null)}>Cancel QR</Button>
             </div>
         )}
@@ -663,20 +690,37 @@ Timestamp: ${new Date().toLocaleTimeString()}
         {image && (
             <div className="flex flex-col items-center gap-6">
                 {image === 'qr_placeholder' ? (
-                   <div className="bg-primary/10 p-12 rounded-xl flex flex-col items-center text-primary border border-primary/20">
+                   <div className="bg-primary/10 p-12 rounded-xl flex flex-col items-center text-primary border border-primary/20 w-full max-w-[600px]">
                       <QrCode className="size-24 mb-4" />
                       <h3 className="font-bold text-xl">QR Captured</h3>
                    </div>
                 ) : (
-                  <img src={image} className="max-h-80 object-contain rounded-xl shadow-md border pointer-events-none" alt="Scanned document" />
+                  <img src={image} className="w-full md:w-[80%] max-w-[800px] max-h-[600px] object-contain rounded-2xl shadow-2xl border-4 border-primary/20 hover:scale-[1.05] transition-transform duration-300 cursor-zoom-in" alt="Scanned document" />
                 )}
                 
-                <div className="flex gap-4">
-                   <Button variant="outline" onClick={() => { setImage(null); setMode('camera'); }} disabled={saving}>Retake</Button>
+                <div className="flex gap-3 justify-center w-full mt-4 flex-wrap">
+                   <Button variant="outline" size="sm" onClick={() => { setImage(null); setMode('camera'); }} disabled={saving} className="rounded-full shadow-sm px-6 h-12 hover:bg-slate-100">
+                     <Camera className="mr-2 size-4" /> Retake
+                   </Button>
+                   <Button variant="outline" size="sm" onClick={() => document.getElementById('replace-upload')?.click()} disabled={saving} className="rounded-full shadow-sm px-6 h-12 hover:bg-blue-50 text-blue-600 border-blue-200">
+                     <Upload className="mr-2 size-4" /> Replace
+                     <Input id="replace-upload" type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+                   </Button>
+                   <Button variant="outline" size="sm" onClick={() => setShowCropper(true)} disabled={saving} className="rounded-full shadow-sm px-6 h-12 hover:bg-emerald-50 text-emerald-600 border-emerald-200">
+                     <CropIcon className="mr-2 size-4" /> Crop
+                   </Button>
+                   <Button variant="outline" size="sm" onClick={() => setShowFilters(true)} disabled={saving} className="rounded-full shadow-sm px-6 h-12 hover:bg-purple-50 text-purple-600 border-purple-200">
+                     <Wand2 className="mr-2 size-4" /> Filter
+                   </Button>
+                   
+                   <div className="w-full h-2"></div>
+                   
                    {processing ? (
-                       <Button disabled className="animate-pulse shadow-md bg-blue-600">Processing with AI...</Button>
+                       <Button disabled className="animate-pulse shadow-md bg-blue-600 rounded-full h-12 w-64 text-base font-bold text-white">Processing with AI...</Button>
                    ) : (
-                       <Button onClick={handleSaveExpense} disabled={saving} className="shadow-lg">Save to Database / Cloud</Button>
+                       <Button onClick={handleSaveExpense} disabled={saving} className="shadow-xl bg-emerald-600 hover:bg-emerald-700 text-white rounded-full h-12 w-64 text-base font-bold transition-transform hover:scale-105">
+                         <Save className="mr-2 size-5" /> Save to Cloud DB
+                       </Button>
                    )}
                 </div>
             </div>
@@ -718,6 +762,60 @@ Timestamp: ${new Date().toLocaleTimeString()}
              </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* OCR Extracted Text - Editable Box */}
+      {image && !processing && extractedText && (
+        <Card className="mt-6 border-t-4 border-t-amber-500 shadow-md">
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileText className="text-amber-500 size-5" />
+                📝 OCR Extracted Text
+              </CardTitle>
+              <div className="flex gap-2">
+                <Button size="sm" variant={isEditingOcr ? 'default' : 'outline'} onClick={() => setIsEditingOcr(!isEditingOcr)}>
+                  <Edit2 className="size-3 mr-1" /> {isEditingOcr ? 'Done' : 'Edit'}
+                </Button>
+                <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => { setExtractedText(''); toast.success('OCR text cleared'); }}>
+                  <Trash2 className="size-3 mr-1" /> Clear
+                </Button>
+              </div>
+            </div>
+            <CardDescription>Full text extracted from the receipt image. You can edit or clear this text.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isEditingOcr ? (
+              <textarea
+                className="w-full h-72 p-4 border-2 border-amber-300 rounded-xl font-mono text-sm bg-amber-50 dark:bg-amber-900/10 dark:border-amber-700 focus:ring-2 focus:ring-amber-400 focus:outline-none resize-y"
+                value={extractedText}
+                onChange={e => setExtractedText(e.target.value)}
+              />
+            ) : (
+              <pre className="text-sm bg-white dark:bg-slate-900 p-4 h-72 overflow-y-auto rounded-xl whitespace-pre-wrap font-mono border-2 border-slate-200 dark:border-slate-700 shadow-inner leading-relaxed">
+                {extractedText}
+              </pre>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {showFilters && image && (
+         <ImageFilter 
+            imageSrc={image} 
+            onApply={(filteredStr) => { setImage(filteredStr); setShowFilters(false); processImageOnBackend(filteredStr); }} 
+            onCancel={() => setShowFilters(false)} 
+            isOpen={showFilters} 
+         />
+      )}
+
+      {showCropper && image && (
+         <ImageCropper 
+            imageSrc={image} 
+            onCrop={(croppedStr) => { setImage(croppedStr); setShowCropper(false); processImageOnBackend(croppedStr); }} 
+            onCancel={() => setShowCropper(false)} 
+            isOpen={showCropper} 
+         />
       )}
     </div>
   );

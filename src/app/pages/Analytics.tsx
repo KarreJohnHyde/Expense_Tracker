@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { api } from '../lib/api';
 import { Skeleton } from '../components/ui/skeleton';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line } from 'recharts';
-import { DollarSign, Activity, CreditCard, Camera } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, Legend } from 'recharts';
+import { DollarSign, Activity, CreditCard, Camera, PieChart } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useCurrency } from '../lib/currency';
 
@@ -95,14 +95,36 @@ export default function Analytics() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
-        <p className="text-muted-foreground">
-          Deep insights into your spending patterns
+        <h1 className="text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
+        <p className="text-muted-foreground mt-1">
+          Deep insights into your spending patterns with AI analysis
         </p>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <Card className="bg-gradient-to-br from-primary/10 to-transparent border-primary/20 shadow-sm hover:shadow transition-all">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-primary">Top Category</CardTitle>
+            <PieChart className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-black truncate text-primary/80">
+              {(() => {
+                if (!analytics?.categoryBreakdown?.length) return 'N/A';
+                const top = [...analytics.categoryBreakdown].sort((a,b) => b.amount - a.amount)[0];
+                return top.category;
+              })()}
+            </div>
+            <p className="text-xs text-muted-foreground font-medium mt-1">
+              {(() => {
+                if (!analytics?.categoryBreakdown?.length) return '$0.00';
+                const top = [...analytics.categoryBreakdown].sort((a,b) => b.amount - a.amount)[0];
+                return `${formatCurrency(top.amount)} (${top.percentage?.toFixed(1)}%)`;
+              })()}
+            </p>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -197,13 +219,27 @@ export default function Analytics() {
                     />
                     <YAxis className="text-xs" />
                     <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))' 
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="glass p-4 rounded-xl border border-white/20 shadow-2xl bg-background/95 backdrop-blur-md">
+                              <p className="font-bold text-lg border-b pb-2 mb-2 text-foreground">{label}</p>
+                              {payload.map((p: any, i: number) => (
+                                 <p key={i} className="text-sm flex items-center gap-2 text-foreground">
+                                   <span className="w-3 h-3 rounded-full shadow-sm" style={{backgroundColor: p.color}}></span>
+                                   <span className="opacity-80">{p.name === 'amount' ? 'Spent' : p.name}:</span>
+                                   <span className="font-mono font-bold text-indigo-500 text-base">{formatCurrency(p.value)}</span>
+                                 </p>
+                              ))}
+                            </div>
+                          );
+                        }
+                        return null;
                       }}
-                      formatter={(value: number) => formatCurrency(value)}
+                      cursor={{fill: 'rgba(0,0,0,0.05)'}}
                     />
-                    <Bar dataKey="amount" fill="#8b5cf6" radius={[8, 8, 0, 0]} isAnimationActive={false} />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Bar name="Total Spent" dataKey="amount" fill="#6366f1" radius={[8, 8, 0, 0]} isAnimationActive={false} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -242,18 +278,33 @@ export default function Analytics() {
                     <XAxis dataKey="week" className="text-xs" />
                     <YAxis className="text-xs" />
                     <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))' 
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="glass p-4 rounded-xl border border-white/20 shadow-2xl bg-background/95 backdrop-blur-md">
+                              <p className="font-bold text-lg border-b pb-2 mb-2 text-foreground">{label}</p>
+                              {payload.map((p: any, i: number) => (
+                                 <p key={i} className="text-sm flex items-center gap-2 text-foreground">
+                                   <span className="w-3 h-3 rounded-full shadow-sm" style={{backgroundColor: p.color}}></span>
+                                   <span className="opacity-80">{p.name === 'amount' ? 'Trend' : p.name}:</span>
+                                   <span className="font-mono font-bold text-pink-500 text-base">{formatCurrency(p.value)}</span>
+                                 </p>
+                              ))}
+                            </div>
+                          );
+                        }
+                        return null;
                       }}
-                      formatter={(value: number) => formatCurrency(value)}
                     />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
                     <Line 
+                      name="Spending Trend"
                       type="monotone" 
                       dataKey="amount" 
-                      stroke="#3b82f6" 
-                      strokeWidth={2}
-                      dot={{ r: 4 }}
+                      stroke="#ec4899" 
+                      strokeWidth={3}
+                      dot={{ r: 5, fill: '#ec4899', strokeWidth: 2, stroke: '#fff' }}
+                      activeDot={{ r: 8 }}
                       isAnimationActive={false}
                     />
                   </LineChart>
@@ -277,13 +328,27 @@ export default function Analytics() {
                     <XAxis dataKey="method" className="text-xs" />
                     <YAxis className="text-xs" />
                     <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))' 
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="glass p-4 rounded-xl border border-white/20 shadow-2xl bg-background/95 backdrop-blur-md">
+                              <p className="font-bold text-lg border-b pb-2 mb-2 text-foreground">{label}</p>
+                              {payload.map((p: any, i: number) => (
+                                 <p key={i} className="text-sm flex items-center gap-2 text-foreground">
+                                   <span className="w-3 h-3 rounded-full shadow-sm" style={{backgroundColor: p.color}}></span>
+                                   <span className="opacity-80">{p.name === 'amount' ? 'Throughput' : p.name}:</span>
+                                   <span className="font-mono font-bold text-emerald-500 text-base">{formatCurrency(p.value)}</span>
+                                 </p>
+                              ))}
+                            </div>
+                          );
+                        }
+                        return null;
                       }}
-                      formatter={(value: number) => formatCurrency(value)}
+                      cursor={{fill: 'rgba(0,0,0,0.05)'}}
                     />
-                    <Bar dataKey="amount" fill="#10b981" radius={[8, 8, 0, 0]} isAnimationActive={false} />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Bar name="Volume" dataKey="amount" fill="#10b981" radius={[8, 8, 0, 0]} isAnimationActive={false} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -311,13 +376,27 @@ export default function Analytics() {
                     />
                     <YAxis className="text-xs" />
                     <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))' 
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="glass p-4 rounded-xl border border-white/20 shadow-2xl bg-background/95 backdrop-blur-md">
+                              <p className="font-bold text-lg border-b pb-2 mb-2 text-foreground">{label}</p>
+                              {payload.map((p: any, i: number) => (
+                                 <p key={i} className="text-sm flex items-center gap-2 text-foreground">
+                                   <span className="w-3 h-3 rounded-full shadow-sm" style={{backgroundColor: p.color}}></span>
+                                   <span className="opacity-80">{p.name === 'amount' ? 'Tracked' : p.name}:</span>
+                                   <span className="font-mono font-bold text-teal-500 text-base">{formatCurrency(p.value)}</span>
+                                 </p>
+                              ))}
+                            </div>
+                          );
+                        }
+                        return null;
                       }}
-                      formatter={(value: number) => formatCurrency(value)}
+                      cursor={{fill: 'rgba(0,0,0,0.05)'}}
                     />
-                    <Bar dataKey="amount" fill="#14b8a6" radius={[8, 8, 0, 0]} isAnimationActive={false} />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Bar name="Total Scanned Value" dataKey="amount" fill="#14b8a6" radius={[8, 8, 0, 0]} isAnimationActive={false} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { normalizeExpenseCategory, type ExpenseSource } from './expenseSchema';
+import { auth } from './auth';
 
 const _meta = (import.meta as any).env || {};
 const PYTHON_API_URL = (_meta.VITE_PYTHON_API_URL as string) || 'http://127.0.0.1:3000';
@@ -47,6 +48,14 @@ function safeParse<T>(value: string | null, fallback: T): T {
   }
 }
 
+function getDynamicKey(baseKey: string): string {
+  const user = auth.getCurrentUser();
+  if (!user || user.email === 'demo@expense-tracker.com') {
+    return baseKey;
+  }
+  return `${baseKey}_${user.id}`;
+}
+
 function normalizeExpense(expense: Expense): Expense {
   return {
     ...expense,
@@ -60,7 +69,7 @@ function normalizeExpense(expense: Expense): Expense {
 }
 
 function getLocalExpenses(): Expense[] {
-  const data = safeParse<Expense[] | null>(localStorage.getItem(STORAGE_KEYS.EXPENSES), null);
+  const data = safeParse<Expense[] | null>(localStorage.getItem(getDynamicKey(STORAGE_KEYS.EXPENSES)), null);
   if (data) {
     const normalized = data.map(normalizeExpense);
     return normalized;
@@ -68,8 +77,16 @@ function getLocalExpenses(): Expense[] {
   return [];
 }
 function saveLocalExpenses(expenses: Expense[]) {
-  localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
+  localStorage.setItem(getDynamicKey(STORAGE_KEYS.EXPENSES), JSON.stringify(expenses));
   window.dispatchEvent(new Event('expenseai:edge:expenses_updated'));
+}
+
+function getLocalBudgets(): Budget[] {
+  return safeParse<Budget[] | null>(localStorage.getItem(getDynamicKey(STORAGE_KEYS.BUDGETS)), null) || [];
+}
+
+function saveLocalBudgets(budgets: Budget[]) {
+  localStorage.setItem(getDynamicKey(STORAGE_KEYS.BUDGETS), JSON.stringify(budgets));
 }
 
 export const api = {
@@ -194,21 +211,83 @@ export const api = {
     
     // Fallback analytics
     const expenses = getLocalExpenses();
-    const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+    const totalMonthly = expenses.reduce((sum, e) => sum + e.amount, 0);
+
+    const categoryMap: Record<string, number> = {};
+    const methodMap: Record<string, number> = {};
+    const sourceMap: Record<string, { amount: number, count: number }> = {};
+    
+    expenses.forEach(e => {
+        categoryMap[e.category] = (categoryMap[e.category] || 0) + e.amount;
+        const method = e.paymentMethod || 'Unknown';
+        methodMap[method] = (methodMap[method] || 0) + e.amount;
+        const source = e.source || 'manual';
+        if (!sourceMap[source]) sourceMap[source] = { amount: 0, count: 0 };
+        sourceMap[source].amount += e.amount;
+        sourceMap[source].count += 1;
+    });
+
+    const categoryBreakdown = Object.keys(categoryMap).map(k => ({
+        category: k,
+        amount: categoryMap[k],
+        percentage: totalMonthly > 0 ? (categoryMap[k] / totalMonthly) * 100 : 0
+    })).sort((a,b) => b.amount - a.amount);
+
+    const paymentMethodBreakdown = Object.keys(methodMap).map(k => ({
+        method: k,
+        amount: methodMap[k],
+        percentage: totalMonthly > 0 ? (methodMap[k] / totalMonthly) * 100 : 0
+    })).sort((a,b) => b.amount - a.amount);
+    
+    const sourceBreakdown = Object.keys(sourceMap).map(k => ({
+        source: k,
+        amount: sourceMap[k].amount,
+        count: sourceMap[k].count,
+        percentage: totalMonthly > 0 ? (sourceMap[k].amount / totalMonthly) * 100 : 0
+    })).sort((a,b) => b.amount - a.amount);
+
+    // mock weekly trend
+    const weeklyTrend = [
+       { week: 'Week 1', amount: totalMonthly * 0.2 },
+       { week: 'Week 2', amount: totalMonthly * 0.3 },
+       { week: 'Week 3', amount: totalMonthly * 0.1 },
+       { week: 'Week 4', amount: totalMonthly * 0.4 },
+    ];
+
     return {
-      totalMonthly: totalExpenses,
-      categoryBreakdown: [],
+      totalMonthly,
+      totalExpenses: expenses.length,
+      averageExpense: expenses.length > 0 ? totalMonthly / expenses.length : 0,
+      categoryBreakdown,
+      paymentMethodBreakdown,
+      weeklyTrend,
+      sourceBreakdown,
       forecast: { predictedNext7Days: 0, trend: 'stable' },
       anomalies: []
     };
   },
   
-  // Stubs for remaining functions
-  getBudgets: async () => ({ budgets: [] }),
-  setBudget: async (b: any) => b,
-  updateBudget: async (id: string, updates: any) => ({...updates, id}),
-  deleteBudget: async (id: string) => ({success: true}),
-  clearAllBudgets: async () => ({success: true}),
+  getBudgets: async () => {
+    return { budgets: getLocalBudgets() };
+  },
+  setBudget: async (b: Omit<Budget, 'id'>) => {
+    const newBudget = { ...b, id: `budget_${Date.now()}` } as Budget;
+    saveLocalBudgets([...getLocalBudgets(), newBudget]);
+    return newBudget;
+  },
+  updateBudget: async (id: string, updates: Partial<Budget>) => {
+    const budgets = getLocalBudgets().map(b => b.id === id ? { ...b, ...updates } : b);
+    saveLocalBudgets(budgets);
+    return { id, ...updates };
+  },
+  deleteBudget: async (id: string) => {
+    saveLocalBudgets(getLocalBudgets().filter(b => b.id !== id));
+    return { success: true };
+  },
+  clearAllBudgets: async () => {
+    saveLocalBudgets([]);
+    return { success: true };
+  },
   getInsights: async () => {
      try {
        const data = await api.getAnalytics();

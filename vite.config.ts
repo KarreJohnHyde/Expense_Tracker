@@ -64,14 +64,21 @@ export default defineConfig({
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
   build: {
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         // Split heavy dependencies so initial route payload stays smaller.
         manualChunks(id) {
           if (!id.includes('node_modules')) return;
 
-          if (id.includes('tesseract.js') || id.includes('@tensorflow') || id.includes('html5-qrcode')) {
-            return 'vendor-ml';
+          if (id.includes('tesseract.js')) {
+            return 'vendor-tesseract';
+          }
+          if (id.includes('@tensorflow')) {
+            return 'vendor-tensorflow';
+          }
+          if (id.includes('html5-qrcode')) {
+            return 'vendor-qrcode';
           }
           if (id.includes('@mui') || id.includes('@emotion')) {
             return 'vendor-mui';
@@ -88,8 +95,17 @@ export default defineConfig({
           if (id.includes('@supabase')) {
             return 'vendor-supabase';
           }
-          if (id.includes('react-router')) {
+          if (id.includes('react-router') || id.includes('@remix-run')) {
             return 'vendor-router';
+          }
+          if (id.includes('lucide-react')) {
+            return 'vendor-icons';
+          }
+          if (id.includes('jspdf')) {
+            return 'vendor-jspdf';
+          }
+          if (id.includes('html2canvas')) {
+            return 'vendor-html2canvas';
           }
         },
       },

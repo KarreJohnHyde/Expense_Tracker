@@ -1,198 +1,547 @@
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, QueryCommand, GetCommand, PutCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
-import crypto from 'crypto';
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { promises as fs } from 'node:fs';
+import { spawn } from 'node:child_process';
 
-const isLocal = process.env.AWS_SAM_LOCAL === 'true';
-const client = new DynamoDBClient({
-  region: 'us-east-1',
-  ...(isLocal ? { endpoint: 'http://host.docker.internal:4566' } : {})
-});
-const docClient = DynamoDBDocumentClient.from(client);
+import Busboy from 'busboy';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-const TABLE_NAME = process.env.TABLE_NAME || 'ExpenseTrackerTable';
-// Hardcoded user ID for prototyping (until Cognito authorizer is securely linked)
-const USER_ID = 'USER#default';
+const MAX_FILE_BYTES = Number(process.env.MAX_FILE_BYTES || 12 * 1024 * 1024);
+const ALLOWED_MIME_TYPES = new Set((process.env.ALLOWED_MIME_TYPES || 'image/jpeg,image/png,image/webp,image/heic').split(','));
+const WORKER_TIMEOUT_MS = Number(process.env.WORKER_TIMEOUT_MS || 60000);
+const ENABLE_RATE_LIMIT = process.env.ENABLE_RATE_LIMIT === 'true';
+const RATE_LIMIT_PER_MINUTE = Number(process.env.RATE_LIMIT_PER_MINUTE || 30);
 
-function generateResponse(statusCode, body) {
+const S3_BUCKET = process.env.RECEIPT_UPLOAD_BUCKET || '';
+const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+const OCR_WORKER_URL = process.env.OCR_WORKER_URL || '';
+const OCR_CLI_COMMAND = process.env.OCR_CLI_COMMAND || 'python python_worker/app/cli_ocr.py';
+
+const s3Client = new S3Client({ region: AWS_REGION });
+const rateLimiter = new Map();
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': process.env.CORS_ALLOW_ORIGIN || '*',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Requested-With,X-Request-Id',
+  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+};
+
+function json(statusCode, payload, requestId) {
   return {
     statusCode,
     headers: {
+      ...corsHeaders,
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*', // allow CORS
-      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+      'X-Request-Id': requestId || '',
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   };
 }
 
-export const handler = async (event) => {
-  console.log('Received event:', event.httpMethod, event.path);
+function getRequestId(event, context) {
+  return context?.awsRequestId || event?.requestContext?.requestId || randomUUID();
+}
 
-  // Handle CORS preflight OPTIONS request
-  if (event.httpMethod === 'OPTIONS') {
-    return generateResponse(200, {});
+function log(requestId, message, extra) {
+  const base = `[ocr-api][${requestId}] ${message}`;
+  if (extra) {
+    console.log(base, extra);
+    return;
+  }
+  console.log(base);
+}
+
+function getHeader(event, key) {
+  const headers = event?.headers || {};
+  const foundKey = Object.keys(headers).find((candidate) => candidate.toLowerCase() === key.toLowerCase());
+  return foundKey ? headers[foundKey] : undefined;
+}
+
+function getRoutePath(event) {
+  return event?.rawPath || event?.path || '/';
+}
+
+function getHttpMethod(event) {
+  return event?.requestContext?.http?.method || event?.httpMethod || 'GET';
+}
+
+function getClientIp(event) {
+  return (
+    event?.requestContext?.http?.sourceIp ||
+    getHeader(event, 'x-forwarded-for')?.split(',')[0]?.trim() ||
+    'unknown'
+  );
+}
+
+function normalizeWorkerPayload(workerResponse, jobId, processingTimeMs) {
+  const words = Array.isArray(workerResponse?.words) ? workerResponse.words : [];
+  const qr = Array.isArray(workerResponse?.qr) ? workerResponse.qr : [];
+  const items = Array.isArray(workerResponse?.items) ? workerResponse.items : [];
+
+  return {
+    raw_text: workerResponse?.raw_text || '',
+    corrected_text: workerResponse?.corrected_text || workerResponse?.raw_text || '',
+    items,
+    total: Number(workerResponse?.total || 0),
+    date: workerResponse?.date || null,
+    qr,
+    words,
+    processing_time_ms: Number(workerResponse?.processing_time_ms || processingTimeMs),
+    job_id: workerResponse?.job_id || jobId,
+    metadata: workerResponse?.metadata || {},
+  };
+}
+
+function getRateLimitStatus(ip) {
+  if (!ENABLE_RATE_LIMIT) {
+    return { allowed: true, remaining: RATE_LIMIT_PER_MINUTE };
+  }
+
+  const now = Date.now();
+  const minuteStart = Math.floor(now / 60000) * 60000;
+  const existing = rateLimiter.get(ip);
+
+  if (!existing || existing.windowStart !== minuteStart) {
+    rateLimiter.set(ip, { windowStart: minuteStart, count: 1 });
+    return { allowed: true, remaining: RATE_LIMIT_PER_MINUTE - 1 };
+  }
+
+  existing.count += 1;
+  if (existing.count > RATE_LIMIT_PER_MINUTE) {
+    return { allowed: false, remaining: 0 };
+  }
+
+  return { allowed: true, remaining: RATE_LIMIT_PER_MINUTE - existing.count };
+}
+
+function parseJsonBody(event) {
+  if (!event?.body) {
+    return {};
+  }
+
+  const raw = event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString('utf8') : event.body;
+  return JSON.parse(raw || '{}');
+}
+
+function sanitizeFilename(name = 'upload.bin') {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120) || 'upload.bin';
+}
+
+function fileExtensionForMime(mimeType) {
+  const map = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'image/heic': '.heic',
+  };
+  return map[mimeType] || '.bin';
+}
+
+function validateUploadedFile({ mimeType, size }) {
+  if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+    throw new Error(`Unsupported file type: ${mimeType}`);
+  }
+  if (!size || size <= 0) {
+    throw new Error('File is empty');
+  }
+  if (size > MAX_FILE_BYTES) {
+    throw new Error(`File exceeds max size (${MAX_FILE_BYTES} bytes)`);
+  }
+}
+
+async function parseMultipart(event, requestId) {
+  const contentType = getHeader(event, 'content-type');
+  if (!contentType?.includes('multipart/form-data')) {
+    throw new Error('Invalid multipart content type');
+  }
+
+  const bodyBuffer = event?.isBase64Encoded
+    ? Buffer.from(event.body || '', 'base64')
+    : Buffer.from(event.body || '', 'utf8');
+
+  return new Promise((resolve, reject) => {
+    const fields = {};
+    let file = null;
+
+    const bb = Busboy({ headers: { 'content-type': contentType } });
+
+    bb.on('file', (fieldName, stream, info) => {
+      const { filename, mimeType } = info;
+      const chunks = [];
+      let size = 0;
+
+      stream.on('data', (chunk) => {
+        size += chunk.length;
+        if (size > MAX_FILE_BYTES) {
+          stream.unpipe();
+          reject(new Error(`Uploaded file is larger than ${MAX_FILE_BYTES} bytes`));
+          return;
+        }
+        chunks.push(chunk);
+      });
+
+      stream.on('end', () => {
+        file = {
+          fieldName,
+          filename: sanitizeFilename(filename),
+          mimeType,
+          size,
+          buffer: Buffer.concat(chunks),
+        };
+      });
+    });
+
+    bb.on('field', (name, value) => {
+      fields[name] = value;
+    });
+
+    bb.on('finish', () => {
+      log(requestId, 'Parsed multipart payload', {
+        hasFile: Boolean(file),
+        fieldCount: Object.keys(fields).length,
+      });
+      resolve({ file, fields });
+    });
+
+    bb.on('error', reject);
+    bb.end(bodyBuffer);
+  });
+}
+
+async function bufferFromStream(stream) {
+  const chunks = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+async function fetchImageFromUrl(imageUrl) {
+  const response = await fetch(imageUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image URL: ${response.status}`);
+  }
+  const mimeType = response.headers.get('content-type') || 'application/octet-stream';
+  const arrayBuffer = await response.arrayBuffer();
+  return { buffer: Buffer.from(arrayBuffer), mimeType };
+}
+
+async function fetchImageFromS3(bucket, key) {
+  const output = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const buffer = await bufferFromStream(output.Body);
+  return {
+    buffer,
+    mimeType: output.ContentType || 'application/octet-stream',
+  };
+}
+
+async function writeTempFile({ buffer, mimeType, filename, jobId }) {
+  const extension = fileExtensionForMime(mimeType);
+  const tempFilename = `${jobId}_${sanitizeFilename(filename || 'receipt')}${extension}`;
+  const tempPath = path.join(tmpdir(), tempFilename);
+  await fs.writeFile(tempPath, buffer);
+  return tempPath;
+}
+
+async function maybeUploadOriginalToS3({ buffer, mimeType, jobId, filename, requestId }) {
+  if (!S3_BUCKET) {
+    return null;
+  }
+
+  const key = `receipts/${jobId}/${sanitizeFilename(filename || `upload${fileExtensionForMime(mimeType)}`)}`;
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: mimeType,
+      ServerSideEncryption: 'AES256',
+    }),
+  );
+
+  log(requestId, 'Uploaded original image to S3', { bucket: S3_BUCKET, key });
+  return { bucket: S3_BUCKET, key };
+}
+
+async function invokeFastApiWorker({ buffer, mimeType, filename, blobPath, jobId, requestId }) {
+  const endpoint = `${OCR_WORKER_URL.replace(/\/$/, '')}/process-image`;
+  let body;
+  const headers = { 'x-job-id': jobId };
+
+  if (blobPath) {
+    headers['content-type'] = 'application/json';
+    body = JSON.stringify({ blob_path: blobPath, job_id: jobId });
+  } else {
+    const form = new FormData();
+    const blob = new Blob([buffer], { type: mimeType });
+    form.append('file', blob, filename || 'receipt.jpg');
+    form.append('job_id', jobId);
+    body = form;
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers,
+    body,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`OCR worker returned ${response.status}: ${text}`);
+  }
+
+  const payload = await response.json();
+  log(requestId, 'FastAPI worker completed', { endpoint });
+  return payload;
+}
+
+function parseCommand(command) {
+  const tokens = command.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+  if (tokens.length === 0) {
+    throw new Error('OCR_CLI_COMMAND is empty');
+  }
+  return tokens.map((token) => token.replace(/^"|"$/g, ''));
+}
+
+async function invokeCliWorker({ imagePath, jobId, requestId }) {
+  const [cmd, ...baseArgs] = parseCommand(OCR_CLI_COMMAND);
+  const args = [...baseArgs, '--input', imagePath, '--job-id', jobId];
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+
+    const timeout = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error(`CLI worker timed out after ${WORKER_TIMEOUT_MS}ms`));
+    }, WORKER_TIMEOUT_MS);
+
+    child.stdout.on('data', (chunk) => {
+      const text = chunk.toString();
+      stdout += text;
+      text
+        .split('\n')
+        .filter(Boolean)
+        .forEach((line) => log(requestId, `[cli:stdout] ${line}`));
+    });
+
+    child.stderr.on('data', (chunk) => {
+      const text = chunk.toString();
+      stderr += text;
+      text
+        .split('\n')
+        .filter(Boolean)
+        .forEach((line) => log(requestId, `[cli:stderr] ${line}`));
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timeout);
+      if (code !== 0) {
+        reject(new Error(`CLI worker failed (exit ${code}): ${stderr || stdout}`));
+        return;
+      }
+
+      try {
+        const jsonPayload = JSON.parse(stdout.trim());
+        resolve(jsonPayload);
+      } catch {
+        reject(new Error('CLI worker output is not valid JSON'));
+      }
+    });
+
+    child.on('error', (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
+}
+
+async function processImageRequest(event, requestId) {
+  const contentType = getHeader(event, 'content-type') || '';
+  let tempFilePath;
+  const jobId = randomUUID();
+
+  const startedAt = Date.now();
+  let imageBuffer;
+  let mimeType;
+  let filename = `receipt-${jobId}.jpg`;
+  let blobPath = null;
+
+  try {
+    if (contentType.includes('multipart/form-data')) {
+      const { file } = await parseMultipart(event, requestId);
+      if (!file) {
+        throw new Error('Multipart request did not include a file');
+      }
+
+      validateUploadedFile({ mimeType: file.mimeType, size: file.size });
+      imageBuffer = file.buffer;
+      mimeType = file.mimeType;
+      filename = file.filename;
+    } else {
+      const payload = parseJsonBody(event);
+
+      if (payload.blob_path) {
+        blobPath = payload.blob_path;
+      } else if (payload.image_url || payload.signed_upload_url) {
+        const fetched = await fetchImageFromUrl(payload.image_url || payload.signed_upload_url);
+        imageBuffer = fetched.buffer;
+        mimeType = fetched.mimeType;
+      } else if (payload.s3_bucket && payload.s3_key) {
+        const fetched = await fetchImageFromS3(payload.s3_bucket, payload.s3_key);
+        imageBuffer = fetched.buffer;
+        mimeType = fetched.mimeType;
+        filename = path.basename(payload.s3_key);
+      } else {
+        throw new Error('Provide multipart file upload, image_url, signed_upload_url, blob_path, or s3_bucket/s3_key');
+      }
+
+      if (imageBuffer) {
+        validateUploadedFile({ mimeType, size: imageBuffer.length });
+      }
+    }
+
+    let uploadedAsset = null;
+    if (imageBuffer) {
+      uploadedAsset = await maybeUploadOriginalToS3({
+        buffer: imageBuffer,
+        mimeType,
+        jobId,
+        filename,
+        requestId,
+      });
+
+      tempFilePath = await writeTempFile({
+        buffer: imageBuffer,
+        mimeType,
+        filename,
+        jobId,
+      });
+      log(requestId, 'Saved temp image', { tempFilePath });
+    }
+
+    const workerResult = OCR_WORKER_URL
+      ? await invokeFastApiWorker({
+          buffer: imageBuffer,
+          mimeType,
+          filename,
+          blobPath,
+          jobId,
+          requestId,
+        })
+      : await invokeCliWorker({ imagePath: tempFilePath, jobId, requestId });
+
+    const normalized = normalizeWorkerPayload(workerResult, jobId, Date.now() - startedAt);
+    normalized.storage = uploadedAsset;
+    return normalized;
+  } finally {
+    if (tempFilePath) {
+      await fs.rm(tempFilePath, { force: true }).catch(() => undefined);
+      log(requestId, 'Deleted temp image', { tempFilePath });
+    }
+  }
+}
+
+async function createSignedUploadUrl(event, requestId) {
+  if (!S3_BUCKET) {
+    throw new Error('RECEIPT_UPLOAD_BUCKET is not configured');
+  }
+
+  const payload = parseJsonBody(event);
+  const mimeType = payload.mime_type || payload.content_type || 'image/jpeg';
+
+  if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+    throw new Error(`Unsupported upload MIME type: ${mimeType}`);
+  }
+
+  const originalName = sanitizeFilename(payload.file_name || `receipt-${Date.now()}`);
+  const key = `incoming/${randomUUID()}-${originalName}`;
+
+  const command = new PutObjectCommand({
+    Bucket: S3_BUCKET,
+    Key: key,
+    ContentType: mimeType,
+    ServerSideEncryption: 'AES256',
+  });
+
+  const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
+
+  log(requestId, 'Issued signed upload URL', { key, mimeType });
+
+  return {
+    upload_url: uploadUrl,
+    s3_bucket: S3_BUCKET,
+    s3_key: key,
+    expires_in_seconds: 300,
+    method: 'PUT',
+    required_headers: {
+      'Content-Type': mimeType,
+      'x-amz-server-side-encryption': 'AES256',
+    },
+  };
+}
+
+export const handler = async (event, context) => {
+  const requestId = getRequestId(event, context);
+  const method = getHttpMethod(event);
+  const routePath = getRoutePath(event);
+  const clientIp = getClientIp(event);
+
+  log(requestId, `Incoming request ${method} ${routePath}`, { clientIp });
+
+  if (method === 'OPTIONS') {
+    return json(200, { ok: true }, requestId);
+  }
+
+  const limiter = getRateLimitStatus(clientIp);
+  if (!limiter.allowed) {
+    return json(
+      429,
+      {
+        error: 'Too many requests',
+        request_id: requestId,
+      },
+      requestId,
+    );
   }
 
   try {
-    const path = event.path;
-    const body = event.body ? JSON.parse(event.body) : null;
-    const idParam = event.pathParameters ? event.pathParameters.proxy : null; // Proxy captures the trailing parts natively or we parse path manually
-    
-    // Manual path parsing because proxy might just be the full path minus stage
-    const segments = path.split('/').filter(Boolean);
-    const resource = segments[0]; // 'expenses' or 'budgets'
-    const id = segments.length > 1 ? segments[1] : null;
-
-    if (resource === 'expenses') {
-      if (event.httpMethod === 'GET') {
-        const result = await docClient.send(new QueryCommand({
-          TableName: TABLE_NAME,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-          ExpressionAttributeValues: {
-            ':pk': USER_ID,
-            ':skPrefix': 'EXPENSE#'
-          }
-        }));
-        return generateResponse(200, { expenses: result.Items || [] });
-      }
-
-      if (event.httpMethod === 'POST') {
-        const newExpense = {
-          ...body,
-          id: `exp_${crypto.randomUUID()}`
-        };
-        await docClient.send(new PutCommand({
-          TableName: TABLE_NAME,
-          Item: {
-            PK: USER_ID,
-            SK: `EXPENSE#${newExpense.id}`,
-            ...newExpense
-          }
-        }));
-        return generateResponse(200, newExpense);
-      }
-
-      if (event.httpMethod === 'PUT' && id) {
-        // Fetch existing
-        const existing = await docClient.send(new GetCommand({
-          TableName: TABLE_NAME,
-          Key: { PK: USER_ID, SK: `EXPENSE#${id}` }
-        }));
-        if (!existing.Item) return generateResponse(404, { error: 'Not found' });
-        
-        const updatedExpense = {
-          ...existing.Item,
-          ...body,
-          id // explicitly ensure ID doesn't morph
-        };
-        
-        await docClient.send(new PutCommand({
-          TableName: TABLE_NAME,
-          Item: {
-            PK: USER_ID,
-            SK: `EXPENSE#${id}`,
-            ...updatedExpense
-          }
-        }));
-        return generateResponse(200, updatedExpense);
-      }
-
-      if (event.httpMethod === 'DELETE' && id) {
-        await docClient.send(new DeleteCommand({
-          TableName: TABLE_NAME,
-          Key: { PK: USER_ID, SK: `EXPENSE#${id}` }
-        }));
-        return generateResponse(200, { success: true });
-      }
+    if (method === 'GET' && routePath === '/health') {
+      return json(
+        200,
+        {
+          ok: true,
+          service: 'expense-ocr-node-api',
+          worker_mode: OCR_WORKER_URL ? 'http-fastapi' : 'cli-spawn',
+          request_id: requestId,
+        },
+        requestId,
+      );
     }
 
-    if (resource === 'budgets') {
-      // Handle the 'clear' keyword specifically
-      if (event.httpMethod === 'DELETE' && id === 'clear') {
-        const result = await docClient.send(new QueryCommand({
-          TableName: TABLE_NAME,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-          ExpressionAttributeValues: {
-            ':pk': USER_ID,
-            ':skPrefix': 'BUDGET#'
-          }
-        }));
-        if (result.Items) {
-          for (const item of result.Items) {
-            await docClient.send(new DeleteCommand({
-              TableName: TABLE_NAME,
-              Key: { PK: USER_ID, SK: item.SK }
-            }));
-          }
-        }
-        return generateResponse(200, { success: true });
-      }
-
-      if (event.httpMethod === 'GET') {
-        const result = await docClient.send(new QueryCommand({
-          TableName: TABLE_NAME,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-          ExpressionAttributeValues: {
-            ':pk': USER_ID,
-            ':skPrefix': 'BUDGET#'
-          }
-        }));
-        return generateResponse(200, { budgets: result.Items || [] });
-      }
-
-      if (event.httpMethod === 'POST') {
-        const newBudget = {
-          ...body,
-          id: `bud_${crypto.randomUUID()}`
-        };
-        await docClient.send(new PutCommand({
-          TableName: TABLE_NAME,
-          Item: {
-            PK: USER_ID,
-            SK: `BUDGET#${newBudget.id}`,
-            ...newBudget
-          }
-        }));
-        return generateResponse(200, newBudget);
-      }
-
-      if (event.httpMethod === 'PUT' && id) {
-        const existing = await docClient.send(new GetCommand({
-          TableName: TABLE_NAME,
-          Key: { PK: USER_ID, SK: `BUDGET#${id}` }
-        }));
-        if (!existing.Item) return generateResponse(404, { error: 'Not found' });
-        
-        const updatedBudget = {
-          ...existing.Item,
-          ...body,
-          id
-        };
-        await docClient.send(new PutCommand({
-          TableName: TABLE_NAME,
-          Item: {
-            PK: USER_ID,
-            SK: `BUDGET#${id}`,
-            ...updatedBudget
-          }
-        }));
-        return generateResponse(200, updatedBudget);
-      }
-
-      if (event.httpMethod === 'DELETE' && id) {
-        await docClient.send(new DeleteCommand({
-          TableName: TABLE_NAME,
-          Key: { PK: USER_ID, SK: `BUDGET#${id}` }
-        }));
-        return generateResponse(200, { success: true });
-      }
+    if (method === 'POST' && routePath === '/ocr/upload-url') {
+      const payload = await createSignedUploadUrl(event, requestId);
+      return json(200, payload, requestId);
     }
 
-    // 404 for unhandled routes
-    return generateResponse(404, { error: 'Not Found' });
+    if (method === 'POST' && routePath === '/ocr/process-image') {
+      const result = await processImageRequest(event, requestId);
+      return json(200, result, requestId);
+    }
 
+    return json(404, { error: `Route not found: ${method} ${routePath}`, request_id: requestId }, requestId);
   } catch (error) {
-    console.error('Lambda Error:', error);
-    return generateResponse(500, { error: error.message });
+    log(requestId, 'Request failed', { message: error?.message, stack: error?.stack });
+    return json(
+      500,
+      {
+        error: error?.message || 'Internal server error',
+        request_id: requestId,
+      },
+      requestId,
+    );
   }
 };

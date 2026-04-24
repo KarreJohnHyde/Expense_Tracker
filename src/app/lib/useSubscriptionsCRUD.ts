@@ -1,195 +1,145 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '../../lib/supabaseClient';
 import { toast } from 'sonner';
+import { auth } from './auth';
 
-interface Subscription {
-  id?: string;
+export interface Subscription {
+  id: string;
   name: string;
   amount: number;
   frequency: string;
   category: string;
+  description?: string;
+  paymentMethod?: string;
+  date?: string;
   last_billed?: string;
   next_due?: string;
-  is_active?: boolean;
+  is_active: boolean;
   notes?: string;
-  created_at?: string;
-  updated_at?: string;
+  created_at: string;
+  updated_at: string;
 }
 
-interface SubscriptionStats {
-  total_subscriptions: number;
-  active_subscriptions: number;
-  monthly_total: number;
-  annual_total: number;
-  yearly_estimated: number;
+const BASE_STORAGE_KEY = 'expenseai_subscriptions';
+
+function getStorageKey(): string {
+  const user = auth.getCurrentUser();
+  if (!user || user.email === 'demo@expense-tracker.com') {
+    return BASE_STORAGE_KEY;
+  }
+  return `${BASE_STORAGE_KEY}_${user.id}`;
+}
+
+function loadFromStorage(): Subscription[] {
+  try {
+    const raw = localStorage.getItem(getStorageKey());
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveToStorage(subs: Subscription[]) {
+  localStorage.setItem(getStorageKey(), JSON.stringify(subs));
 }
 
 export function useSubscriptionsCRUD() {
   const [loading, setLoading] = useState(false);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [stats, setStats] = useState<SubscriptionStats | null>(null);
 
-  // ✅ Get authorization token
-  const getAuthToken = useCallback(async () => {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error || !session) throw new Error('Not authenticated');
-    return session.access_token;
+  // ✅ READ all subscriptions
+  const fetchSubscriptions = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = loadFromStorage();
+      setSubscriptions(data);
+      return data;
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // ✅ Make API call to Edge Function
-  const apiCall = useCallback(
-    async (
-      method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-      endpoint: string,
-      body?: any
-    ) => {
+  // ✅ CREATE subscription
+  const createSubscription = useCallback(
+    async (data: Omit<Subscription, 'id' | 'is_active' | 'created_at' | 'updated_at'>) => {
+      setLoading(true);
       try {
-        setLoading(true);
-        const token = await getAuthToken();
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/subscriptions-crud${endpoint}`;
-
-        const options: RequestInit = {
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
+        const now = new Date().toISOString();
+        const newSub: Subscription = {
+          ...data,
+          id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          is_active: true,
+          created_at: now,
+          updated_at: now,
+          last_billed: data.date || now.split('T')[0],
         };
-
-        if (body) options.body = JSON.stringify(body);
-
-        const response = await fetch(url, options);
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'API error');
-        }
-
-        return await response.json();
-      } catch (error) {
-        console.error('API error:', error);
-        toast.error((error as Error).message);
-        throw error;
+        const all = loadFromStorage();
+        all.push(newSub);
+        saveToStorage(all);
+        setSubscriptions(all);
+        toast.success('✅ Subscription created!');
+        return newSub;
       } finally {
         setLoading(false);
       }
     },
-    [getAuthToken]
-  );
-
-  // ✅ CREATE subscription
-  const createSubscription = useCallback(
-    async (data: Subscription) => {
-      try {
-        const result = await apiCall('POST', '', data);
-        toast.success('✅ Subscription created successfully!');
-        await fetchSubscriptions();
-        return result;
-      } catch (error) {
-        console.error('Create failed:', error);
-        throw error;
-      }
-    },
-    [apiCall]
-  );
-
-  // ✅ READ subscriptions
-  const fetchSubscriptions = useCallback(async () => {
-    try {
-      const result = await apiCall('GET', '');
-      if (result.success) {
-        setSubscriptions(result.data || []);
-        return result.data;
-      }
-    } catch (error) {
-      console.error('Fetch failed:', error);
-    }
-  }, [apiCall]);
-
-  // ✅ READ specific subscription
-  const getSubscription = useCallback(
-    async (id: string) => {
-      try {
-        const result = await apiCall('GET', `/${id}`);
-        return result.success ? result.data?.[0] : null;
-      } catch (error) {
-        console.error('Get failed:', error);
-      }
-    },
-    [apiCall]
+    []
   );
 
   // ✅ UPDATE subscription
   const updateSubscription = useCallback(
     async (id: string, updates: Partial<Subscription>) => {
+      setLoading(true);
       try {
-        const result = await apiCall('PUT', `/${id}`, updates);
-        toast.success('✅ Subscription updated successfully!');
-        await fetchSubscriptions();
-        return result;
-      } catch (error) {
-        console.error('Update failed:', error);
-        throw error;
+        const all = loadFromStorage();
+        const idx = all.findIndex(s => s.id === id);
+        if (idx === -1) throw new Error('Subscription not found');
+        all[idx] = { ...all[idx], ...updates, updated_at: new Date().toISOString() };
+        saveToStorage(all);
+        setSubscriptions(all);
+        toast.success('✅ Subscription updated!');
+        return all[idx];
+      } finally {
+        setLoading(false);
       }
     },
-    [apiCall, fetchSubscriptions]
+    []
   );
 
   // ✅ DELETE subscription
   const deleteSubscription = useCallback(
     async (id: string) => {
+      setLoading(true);
       try {
-        const result = await apiCall('DELETE', `/${id}`);
-        toast.success('✅ Subscription deleted successfully!');
-        await fetchSubscriptions();
-        return result;
-      } catch (error) {
-        console.error('Delete failed:', error);
-        toast.error('Failed to delete subscription');
-        throw error;
+        const all = loadFromStorage().filter(s => s.id !== id);
+        saveToStorage(all);
+        setSubscriptions(all);
+        toast.success('✅ Subscription deleted!');
+      } finally {
+        setLoading(false);
       }
     },
-    [apiCall, fetchSubscriptions]
+    []
   );
 
-  // ✅ GET stats
-  const fetchStats = useCallback(async () => {
+  // ✅ CLEAR ALL
+  const clearAllSubscriptions = useCallback(async () => {
+    setLoading(true);
     try {
-      const result = await apiCall('GET', '/stats');
-      if (result.success) {
-        setStats(result.data);
-        return result.data;
-      }
-    } catch (error) {
-      console.error('Stats fetch failed:', error);
+      saveToStorage([]);
+      setSubscriptions([]);
+      toast.success('✅ All subscriptions cleared!');
+    } finally {
+      setLoading(false);
     }
-  }, [apiCall]);
-
-  // ✅ BULK UPDATE
-  const bulkUpdateSubscriptions = useCallback(
-    async (updates: Record<string, Partial<Subscription>>) => {
-      try {
-        const result = await apiCall('PUT', '/bulk', updates);
-        toast.success('✅ Subscriptions updated!');
-        await fetchSubscriptions();
-        return result;
-      } catch (error) {
-        console.error('Bulk update failed:', error);
-        throw error;
-      }
-    },
-    [apiCall, fetchSubscriptions]
-  );
+  }, []);
 
   return {
     loading,
     subscriptions,
-    stats,
     createSubscription,
     fetchSubscriptions,
-    getSubscription,
     updateSubscription,
     deleteSubscription,
-    fetchStats,
-    bulkUpdateSubscriptions,
+    clearAllSubscriptions,
   };
 }
