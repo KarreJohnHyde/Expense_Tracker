@@ -216,6 +216,9 @@ export function getUnreadCount(): number {
 export async function runNotificationEngine() {
   try {
     const { api } = await import('./api');
+    const { auth } = await import('./auth');
+    const { messaging } = await import('./messaging');
+    const user = auth.getCurrentUser();
 
     const [budgetsRes, expensesRes] = await Promise.all([
       api.getBudgets().catch(() => ({ budgets: [] })),
@@ -244,15 +247,31 @@ export async function runNotificationEngine() {
             n => n.type === 'budget_alert' && n.title.includes(budget.category) && n.title.includes('exceeded')
           );
           if (!existing) {
+            const title = `🚨 Budget exceeded: ${budget.category}`;
+            const message = `You've spent ₹${spent.toFixed(0)} of ₹${budget.amount} budget (${percent.toFixed(0)}%)`;
+            
             saveNotification({
               type: 'budget_alert',
-              title: `🚨 Budget exceeded: ${budget.category}`,
-              message: `You've spent ₹${spent.toFixed(0)} of ₹${budget.amount} budget (${percent.toFixed(0)}%)`,
+              title,
+              message,
               priority: 'high',
               actionUrl: '/budgets',
             });
+
+            // Auto-dispatch critical alerts via SMS/WhatsApp if phone is configured
+            const { auth } = await import('./auth');
+            const { messaging } = await import('./messaging');
+            const user = auth.getCurrentUser();
+            
+            if (user?.phoneNumber) {
+              const phone = user.phoneNumber;
+              messaging.sendSMS(phone, `ExpenseAI Alert: ${title}. ${message}`).then(res => {
+                if (!res.success) messaging.sendWhatsApp(phone, `*ExpenseAI Alert*\n${title}\n${message}`);
+              });
+            }
           }
         } else if (percent >= 80) {
+          // Existing 80% budget alert logic...
           const existing = getNotifications().find(
             n => n.type === 'budget_alert' && n.title.includes(budget.category) && n.title.includes('80%')
           );
@@ -266,6 +285,111 @@ export async function runNotificationEngine() {
             });
           }
         }
+      }
+
+      // 1. Large Transaction Alerts (> 10,000)
+      const today = new Date().toISOString().split('T')[0];
+      const largeToday = monthExpenses.filter(e => e.date === today && e.amount >= 10000);
+      
+      for (const expense of largeToday) {
+        const existing = getNotifications().find(
+          n => n.type === 'large_transaction' && n.message.includes(expense.id)
+        );
+        if (!existing) {
+          const title = `🚩 Large Transaction: ₹${expense.amount}`;
+          const message = `A transaction of ₹${expense.amount} was recorded for "${expense.description || 'Unknown'}". (ID: ${expense.id})`;
+          
+          saveNotification({
+            type: 'large_transaction',
+            title,
+            message,
+            priority: 'high',
+            actionUrl: '/expenses',
+          });
+
+          if (user?.phoneNumber) {
+            const phone = user.phoneNumber;
+            messaging.sendSMS(phone, `ExpenseAI High Alert: ${title}. ${message}`).then(res => {
+              if (!res.success) messaging.sendWhatsApp(phone, `*ExpenseAI High Alert*\n${title}\n${message}`);
+            });
+          }
+        }
+      }
+
+      // 2. Subscription Renewal Reminders (3 days away)
+      const subStorageKey = user?.email === 'demo@expense-tracker.com' 
+        ? 'expenseai_subscriptions' 
+        : `expenseai_subscriptions_${user?.id}`;
+      
+      try {
+        const rawSubs = localStorage.getItem(subStorageKey);
+        const subscriptions: any[] = rawSubs ? JSON.parse(rawSubs) : [];
+        const inThreeDays = new Date();
+        inThreeDays.setDate(inThreeDays.getDate() + 3);
+        const targetDate = inThreeDays.toISOString().split('T')[0];
+
+        for (const sub of subscriptions) {
+          if (sub.is_active && sub.next_due === targetDate) {
+            const existing = getNotifications().find(
+              n => n.type === 'bill_reminder' && n.title.includes(sub.name)
+            );
+            if (!existing) {
+              const title = `📅 Renewal coming up: ${sub.name}`;
+              const message = `Your ${sub.name} subscription (₹${sub.amount}) is due in 3 days on ${sub.next_due}.`;
+              
+              saveNotification({
+                type: 'bill_reminder',
+                title,
+                message,
+                priority: 'medium',
+                actionUrl: '/subscriptions',
+              });
+
+              if (user?.phoneNumber) {
+                const phone = user.phoneNumber;
+                messaging.sendWhatsApp(phone, `*ExpenseAI Reminder*\n${title}\n${message}`);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Sub notification check failed', err);
+      }
+
+      // 3. Market Volatility Alerts (Stocks/Crypto)
+      try {
+        const { fetchQuotes } = await import('./marketData');
+        const symbols = ['BTC/USD', 'ETH/USD', 'AAPL', 'TSLA'];
+        const quotes = await fetchQuotes(symbols);
+
+        Object.values(quotes).forEach(quote => {
+          const absChange = Math.abs(quote.changePercent || 0);
+          if (absChange >= 5) {
+            const existing = getNotifications().find(
+              n => n.type === 'info' && n.title.includes('Market Alert') && n.title.includes(quote.symbol)
+            );
+            if (!existing) {
+              const direction = (quote.changePercent || 0) > 0 ? '🚀 Up' : '📉 Down';
+              const title = `📊 Market Alert: ${quote.symbol} ${direction} ${quote.changePercent?.toFixed(2)}%`;
+              const message = `${quote.symbol} is trading at $${quote.price.toFixed(2)}. Significant daily movement detected!`;
+
+              saveNotification({
+                type: 'info',
+                title,
+                message,
+                priority: 'medium',
+                actionUrl: '/market',
+              });
+
+              if (user?.phoneNumber) {
+                const phone = user.phoneNumber;
+                messaging.sendWhatsApp(phone, `*ExpenseAI Market Alert*\n${title}\n${message}`);
+              }
+            }
+          }
+        });
+      } catch (err) {
+        console.warn('Market notification check skipped or failed', err);
       }
     }
 

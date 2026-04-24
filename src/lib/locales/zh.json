@@ -74,6 +74,64 @@
     "all": "全部",
     "none": "无"
   },
-  "profile": {},
-  "about": {}
+  "profile": {
+    "title": "个人资料",
+    "desc": "管理您的账户和财务信息",
+    "edit_profile": "编辑资料",
+    "no_accounts": "尚未添加账户",
+    "add_first": "添加您的第一个账户"
+  },
+  "about": {
+    "subtitle": "了解 AI 驱动的财务管理系统",
+    "mission": "我们的使命",
+    "features": "核心功能"
+  },
+  "stock": {
+    "title": "股票市场",
+    "live": "实时",
+    "demo": "演示",
+    "portfolio_value": "投资组合价值",
+    "total_investment": "总投资",
+    "total_pnl": "总盈亏",
+    "returns": "收益",
+    "search": "搜索股票...",
+    "select_sector": "选择行业",
+    "live_market": "实时市场",
+    "live_desc": "实时股价（15秒自动刷新）",
+    "buy": "买入",
+    "sell": "卖出",
+    "my_portfolio": "我的投资组合",
+    "holdings": "您的当前持仓",
+    "shares": "股",
+    "avg": "均价",
+    "quantity": "数量",
+    "total_value": "总价值",
+    "current_price": "当前价格",
+    "day_change": "日涂跌",
+    "day_high": "日高",
+    "day_low": "日低",
+    "updated": "已更新"
+  },
+  "crypto": {
+    "title": "加密币市场",
+    "live": "24/7 实时",
+    "demo": "演示",
+    "portfolio_value": "投资组合价值",
+    "total_investment": "总投资",
+    "total_pnl": "总盈亏",
+    "returns": "收益",
+    "search": "搜索加密币...",
+    "select_type": "选择类型",
+    "prices": "加密币价格",
+    "live_desc": "实时加密币价格（15秒自动刷新）",
+    "buy": "买入",
+    "sell": "卖出",
+    "my_portfolio": "我的加密币组合",
+    "holdings": "您的当前持仓",
+    "quantity": "数量",
+    "total_value": "总价值",
+    "current_price": "当前价格",
+    "change_24h": "24小时涨跌",
+    "updated": "已更新"
+  }
 }

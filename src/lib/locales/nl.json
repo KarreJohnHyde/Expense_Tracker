@@ -74,6 +74,66 @@
     "all": "Alle",
     "none": "Geen"
   },
-  "profile": {},
-  "about": {}
+  "profile": {
+    "title": "Profiel",
+    "desc": "Beheer uw account en financiële informatie",
+    "edit_profile": "Profiel bewerken",
+    "cancel_edit": "Bewerken annuleren",
+    "save_changes": "Wijzigingen opslaan",
+    "no_accounts": "Nog geen accounts toegevoegd",
+    "add_first": "Voeg uw eerste account toe"
+  },
+  "about": {
+    "subtitle": "Meer informatie over het AI-aangedreven financiële beheersysteem",
+    "mission": "Onze Missie",
+    "features": "Kernfuncties"
+  },
+  "stock": {
+    "title": "Aandelenmarkt",
+    "live": "LIVE",
+    "demo": "DEMO",
+    "portfolio_value": "Portfoliowaarde",
+    "total_investment": "Totale Investering",
+    "total_pnl": "Totale W/V",
+    "returns": "Rendement",
+    "search": "Zoek aandelen...",
+    "select_sector": "Sector kiezen",
+    "live_market": "Live Markt",
+    "live_desc": "Live aandelenkoersen (elke 15 seconden vernieuwd)",
+    "buy": "Kopen",
+    "sell": "Verkopen",
+    "my_portfolio": "Mijn Portfolio",
+    "holdings": "Uw huidige holdings",
+    "shares": "aandelen",
+    "avg": "gem",
+    "quantity": "Hoeveelheid",
+    "total_value": "Totale Waarde",
+    "current_price": "Huidige Prijs",
+    "day_change": "Dagverandering",
+    "day_high": "Daghoogste",
+    "day_low": "Daglaagste",
+    "updated": "Bijgewerkt"
+  },
+  "crypto": {
+    "title": "Cryptomarkt",
+    "live": "24/7 LIVE",
+    "demo": "DEMO",
+    "portfolio_value": "Portfoliowaarde",
+    "total_investment": "Totale Investering",
+    "total_pnl": "Totale W/V",
+    "returns": "Rendement",
+    "search": "Zoek crypto...",
+    "select_type": "Type kiezen",
+    "prices": "Cryptoprijzen",
+    "live_desc": "Live cryptoprijzen (elke 15 seconden vernieuwd)",
+    "buy": "Kopen",
+    "sell": "Verkopen",
+    "my_portfolio": "Mijn Cryptoportfolio",
+    "holdings": "Uw huidige holdings",
+    "quantity": "Hoeveelheid",
+    "total_value": "Totale Waarde",
+    "current_price": "Huidige Prijs",
+    "change_24h": "24u Verandering",
+    "updated": "Bijgewerkt"
+  }
 }

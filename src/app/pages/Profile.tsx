@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { auth, BankAccount, User } from '../lib/auth';
 import { toast } from 'sonner';
+import { messaging } from '../lib/messaging';
 import { 
   User as UserIcon, 
   CreditCard, 
@@ -19,7 +20,9 @@ import {
   Eye,
   EyeOff,
   Shield,
-  CheckCircle2
+  CheckCircle2,
+  MessageSquare,
+  Send
 } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
 import { useCurrency } from '../lib/currency';
@@ -36,7 +39,7 @@ export default function Profile() {
   const [showCardDetails, setShowCardDetails] = useState<Record<string, boolean>>({});
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ fullName: '', email: '' });
+  const [editForm, setEditForm] = useState({ fullName: '', email: '', phoneNumber: '' });
   const [vaultPin, setVaultPin] = useState(localStorage.getItem('expenseai_vault_pin') || '1234');
   const [isPinEditing, setIsPinEditing] = useState(false);
   const [newPin, setNewPin] = useState('');
@@ -59,6 +62,11 @@ export default function Profile() {
     const currentUser = auth.getCurrentUser();
     if (currentUser) {
       setUser(currentUser);
+      setEditForm({
+        fullName: currentUser.fullName || '',
+        email: currentUser.email || '',
+        phoneNumber: currentUser.phoneNumber || ''
+      });
       loadAccounts(currentUser.id);
     }
   }, []);
@@ -70,17 +78,49 @@ export default function Profile() {
 
   const handleSaveProfile = async () => {
     try {
-      // Typically, this would update Supabase, but since user comes from auth local mock:
+      if (!user) return;
       const updatedUser = {
         ...user,
         fullName: editForm.fullName,
-        email: editForm.email
+        email: editForm.email,
+        phoneNumber: editForm.phoneNumber
       };
-      localStorage.setItem('wallet_auth_user', JSON.stringify(updatedUser)); // using standard storage based on auth layout but let's assume it updates.
+      localStorage.setItem('user', JSON.stringify(updatedUser)); 
+      setUser(updatedUser);
       toast.success('Profile updated successfully!');
       setIsEditing(false);
     } catch {
       toast.error('Failed to update profile');
+    }
+  };
+
+  const handleTestWhatsApp = async () => {
+    if (!editForm.phoneNumber) {
+      toast.error('Please enter a phone number first');
+      return;
+    }
+    toast.info('Sending test WhatsApp...');
+    const res = await messaging.sendWhatsApp(editForm.phoneNumber, 'Hello from ExpenseAI! This is a test message. 🚀');
+    if (res.success) {
+      toast.success('WhatsApp sent via API!');
+    } else {
+      toast.warning('API failed. Opening WhatsApp Web fallback...');
+      messaging.openWhatsAppLink(editForm.phoneNumber, 'Hello from ExpenseAI! (Manual fallback)');
+    }
+  };
+
+  const handleTestSMS = async () => {
+    if (!editForm.phoneNumber) {
+      toast.error('Please enter a phone number first');
+      return;
+    }
+    toast.info('Sending test SMS...');
+    const res = await messaging.sendSMS(editForm.phoneNumber, 'ExpenseAI: This is a test SMS notification.');
+    if (res.success) {
+      toast.success('SMS sent successfully!');
+    } else {
+      toast.warning('API failed. Opening default SMS app...');
+      messaging.openSMSLink(editForm.phoneNumber, 'ExpenseAI: This is a test SMS notification.');
     }
   };
 
@@ -269,6 +309,17 @@ export default function Profile() {
             </div>
 
             <div className="space-y-2">
+              <Label>Phone Number (with Country Code)</Label>
+              <Input 
+                placeholder="+91 9876543210"
+                value={editForm.phoneNumber} 
+                onChange={(e) => setEditForm({ ...editForm, phoneNumber: e.target.value })}
+                disabled={!isEditing} 
+              />
+              <p className="text-[10px] text-muted-foreground italic">Use E.164 format: +[country_code][number]</p>
+            </div>
+
+            <div className="space-y-2">
               <Label>{t('profile.user_id')}</Label>
               <Input value={user.id} disabled className="font-mono text-xs" />
             </div>
@@ -345,6 +396,60 @@ export default function Profile() {
               <div className="w-full bg-muted rounded-full h-2">
                 <div className="bg-green-600 h-2 rounded-full" style={{ width: '90%' }} />
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Communications & Notifications */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MessageSquare className="size-5" />
+              Communications & Notifications
+            </CardTitle>
+            <CardDescription>Configure how you receive alerts for budgets, bills, and large transactions.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2">
+               <div className="p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/20 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="p-1.5 bg-emerald-500/10 rounded-lg">
+                        <MessageSquare className="size-4 text-emerald-600" />
+                      </div>
+                      <h4 className="font-semibold text-sm">WhatsApp Integration</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-4">Receive budget alerts and transaction summaries directly on WhatsApp.</p>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full border-emerald-500/30 hover:bg-emerald-500/10"
+                    onClick={handleTestWhatsApp}
+                  >
+                    <Send className="size-3 mr-2" /> Send Test WhatsApp
+                  </Button>
+               </div>
+
+               <div className="p-4 rounded-xl border bg-blue-500/5 border-blue-500/20 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="p-1.5 bg-blue-500/10 rounded-lg">
+                        <Smartphone className="size-4 text-blue-600" />
+                      </div>
+                      <h4 className="font-semibold text-sm">SMS Alerts</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-4">Get critical security alerts and large transaction warnings via standard SMS.</p>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full border-blue-500/30 hover:bg-blue-500/10"
+                    onClick={handleTestSMS}
+                  >
+                    <Send className="size-3 mr-2" /> Send Test SMS
+                  </Button>
+               </div>
             </div>
           </CardContent>
         </Card>

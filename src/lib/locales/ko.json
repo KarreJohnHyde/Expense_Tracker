@@ -74,6 +74,64 @@
     "all": "전체",
     "none": "없음"
   },
-  "profile": {},
-  "about": {}
+  "profile": {
+    "title": "프로필",
+    "desc": "계정 및 재무 정보 관리",
+    "edit_profile": "프로필 편집",
+    "no_accounts": "아직 계정이 없습니다",
+    "add_first": "첫 번째 계정 추가"
+  },
+  "about": {
+    "subtitle": "AI 기반 재무 관리 시스템에 대하여",
+    "mission": "우리의 사명",
+    "features": "핵심 기능"
+  },
+  "stock": {
+    "title": "주식 시장",
+    "live": "실시간",
+    "demo": "데모",
+    "portfolio_value": "포트폴리오 가치",
+    "total_investment": "총 투자액",
+    "total_pnl": "주식 수익",
+    "returns": "수익률",
+    "search": "주식 검색...",
+    "select_sector": "섹터 선택",
+    "live_market": "실시간 시장",
+    "live_desc": "실시간 주가 (15초마다 자동 새로고침)",
+    "buy": "매수",
+    "sell": "매도",
+    "my_portfolio": "나의 포트폴리오",
+    "holdings": "현재 보유 주식",
+    "shares": "주",
+    "avg": "평균",
+    "quantity": "수량",
+    "total_value": "총 가치",
+    "current_price": "현재 가격",
+    "day_change": "일중 변동",
+    "day_high": "일중 고가",
+    "day_low": "일중 저가",
+    "updated": "업데이트 완료"
+  },
+  "crypto": {
+    "title": "암호화폐 시장",
+    "live": "24/7 실시간",
+    "demo": "데모",
+    "portfolio_value": "포트폴리오 가치",
+    "total_investment": "총 투자액",
+    "total_pnl": "주식 수익",
+    "returns": "수익률",
+    "search": "코인 검색...",
+    "select_type": "유형 선택",
+    "prices": "암호화폐 가격",
+    "live_desc": "실시간 암호화폐 가격 (15초마다 자동 새로고침)",
+    "buy": "매수",
+    "sell": "매도",
+    "my_portfolio": "나의 암호화폐 포트폴리오",
+    "holdings": "현재 보유 암호화폐",
+    "quantity": "수량",
+    "total_value": "총 가치",
+    "current_price": "현재 가격",
+    "change_24h": "24시간 변동",
+    "updated": "업데이트 완료"
+  }
 }

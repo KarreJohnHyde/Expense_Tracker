@@ -74,6 +74,64 @@
     "all": "すべて",
     "none": "なし"
   },
-  "profile": {},
-  "about": {}
+  "profile": {
+    "title": "プロフィール",
+    "desc": "アカウントと財務情報を管理",
+    "edit_profile": "プロフィール編集",
+    "no_accounts": "まだアカウントが登録されていません",
+    "add_first": "最初のアカウントを追加"
+  },
+  "about": {
+    "subtitle": "AI驱動の財務管理システムについて",
+    "mission": "我々のミッション",
+    "features": "主な機能"
+  },
+  "stock": {
+    "title": "株式市場",
+    "live": "リアルタイム",
+    "demo": "デモ",
+    "portfolio_value": "ポートフォリオ価値",
+    "total_investment": "総投資額",
+    "total_pnl": "総損益",
+    "returns": "リターン",
+    "search": "株式を検索...",
+    "select_sector": "セクターを選択",
+    "live_market": "リアルタイム市場",
+    "live_desc": "リアルタイム株価（15秒ごと自動更新）",
+    "buy": "買う",
+    "sell": "売る",
+    "my_portfolio": "私のポートフォリオ",
+    "holdings": "現在の保有株",
+    "shares": "株",
+    "avg": "平均",
+    "quantity": "数量",
+    "total_value": "合計価値",
+    "current_price": "現在価格",
+    "day_change": "日中変動",
+    "day_high": "日中高値",
+    "day_low": "日中安値",
+    "updated": "更新済み"
+  },
+  "crypto": {
+    "title": "仮想通貨市場",
+    "live": "24/7 リアルタイム",
+    "demo": "デモ",
+    "portfolio_value": "ポートフォリオ価値",
+    "total_investment": "総投資額",
+    "total_pnl": "総損益",
+    "returns": "リターン",
+    "search": "コインを検索...",
+    "select_type": "タイプを選択",
+    "prices": "仮想通貨価格",
+    "live_desc": "リアルタイム仮想通貨価格（15秒ごと自動更新）",
+    "buy": "買う",
+    "sell": "売る",
+    "my_portfolio": "私の仮想通貨ポートフォリオ",
+    "holdings": "現在の保有仮想通貨",
+    "quantity": "数量",
+    "total_value": "合計価値",
+    "current_price": "現在価格",
+    "change_24h": "24時間変動",
+    "updated": "更新済み"
+  }
 }

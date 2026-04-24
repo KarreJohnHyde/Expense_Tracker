@@ -19,6 +19,7 @@ export interface User {
   username: string;
   fullName?: string;
   avatar?: string;
+  phoneNumber?: string;
   createdAt: string;
 }
 
@@ -50,6 +51,7 @@ function toLocalUser(sbUser: { id: string; email?: string; user_metadata?: any; 
     username: sbUser.user_metadata?.username || sbUser.email?.split('@')[0] || 'user',
     fullName: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name,
     avatar: sbUser.user_metadata?.avatar_url,
+    phoneNumber: sbUser.user_metadata?.phone || sbUser.user_metadata?.phoneNumber,
     createdAt: sbUser.created_at || new Date().toISOString(),
   };
 }

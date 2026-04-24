@@ -455,6 +455,8 @@ export default function Root() {
         </div>
       </motion.main>
       <AIVoiceCapture />
+      {/* AI CFO floating button — shown on mobile only (desktop uses the compact top-bar version) */}
+      {isTouchLayout && <AICFO />}
       <AppLock />
     </div>
   );

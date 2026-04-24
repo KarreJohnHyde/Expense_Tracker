@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -93,6 +95,7 @@ const CRYPTO_SEED: Crypto[] = MOCK_CRYPTO.map((c) => ({
 }));
 
 export default function CryptoMarket() {
+  const { t } = useTranslation();
   const { formatCurrency } = useCurrency();
   const [cryptos, setCryptos] = useState<Crypto[]>(CRYPTO_SEED);
   const [filteredCryptos, setFilteredCryptos] = useState<Crypto[]>(CRYPTO_SEED);
@@ -333,20 +336,20 @@ export default function CryptoMarket() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Crypto Market</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t('crypto.title')}</h1>
         <p className="text-muted-foreground">
           {marketStatus.configured ? 'Live crypto prices via Twelve Data' : 'Demo crypto prices (configure live data)'}
         </p>
         <div className="flex items-center gap-2 mt-2">
           <Badge variant={marketStatus.configured ? 'default' : 'secondary'} className={marketStatus.configured ? 'animate-pulse' : ''}>
-            {marketStatus.configured ? '24/7 LIVE' : 'DEMO'}
+            {marketStatus.configured ? t('crypto.live') : t('crypto.demo')}
           </Badge>
           <span className="text-sm text-muted-foreground">
             {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
           </span>
           {lastUpdated && (
             <Badge variant="outline" className="text-xs">
-              Updated: {lastUpdated}
+              {t('crypto.updated')}: {lastUpdated}
             </Badge>
           )}
           {loading && (
@@ -362,7 +365,7 @@ export default function CryptoMarket() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Portfolio Value</p>
+                <p className="text-sm text-muted-foreground">{t('crypto.portfolio_value')}</p>
                 <p className="text-2xl font-bold">{formatCurrency(portfolioValue)}</p>
               </div>
               <Briefcase className="size-8 text-primary" />
@@ -373,7 +376,7 @@ export default function CryptoMarket() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Investment</p>
+                <p className="text-sm text-muted-foreground">{t('crypto.total_investment')}</p>
                 <p className="text-2xl font-bold">{formatCurrency(portfolioInvestment)}</p>
               </div>
               <DollarSign className="size-8 text-blue-500" />
@@ -384,7 +387,7 @@ export default function CryptoMarket() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total P&L</p>
+                <p className="text-sm text-muted-foreground">{t('crypto.total_pnl')}</p>
                 <p className={`text-2xl font-bold ${portfolioProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {portfolioProfit >= 0 ? '+' : ''}{formatCurrency(Math.abs(portfolioProfit))}
                 </p>
@@ -397,7 +400,7 @@ export default function CryptoMarket() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Returns</p>
+                <p className="text-sm text-muted-foreground">{t('crypto.returns')}</p>
                 <p className={`text-2xl font-bold ${portfolioProfitPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {portfolioProfitPercent >= 0 ? '+' : ''}{portfolioProfitPercent.toFixed(2)}%
                 </p>
@@ -414,7 +417,7 @@ export default function CryptoMarket() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
-                placeholder="Search coins..."
+                placeholder={t('crypto.search')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -422,7 +425,7 @@ export default function CryptoMarket() {
             </div>
             <Select value={selectedType} onValueChange={setSelectedType}>
               <SelectTrigger className="w-full md:w-[200px]">
-                <SelectValue placeholder="Select Type" />
+                <SelectValue placeholder={t('crypto.select_type')} />
               </SelectTrigger>
               <SelectContent>
                 {TYPES.map((type: string) => (
@@ -436,8 +439,8 @@ export default function CryptoMarket() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Crypto Prices</CardTitle>
-          <CardDescription>Live crypto prices (auto-refreshes every 15 seconds)</CardDescription>
+          <CardTitle>{t('crypto.prices')}</CardTitle>
+          <CardDescription>{t('crypto.live_desc')}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
@@ -468,12 +471,12 @@ export default function CryptoMarket() {
                     <span>{crypto.changePercent >= 0 ? '+' : ''}{crypto.changePercent.toFixed(2)}%</span>
                   </div>
                 </div>
-                <div className="ml-4 flex gap-2">
-                  <Button size="sm" onClick={(e) => { e.stopPropagation(); openTradeDialog(crypto, 'buy'); }}>
-                    <Plus className="size-3 mr-1" /> Buy
+                <div className="ml-2 flex flex-row flex-wrap gap-1 shrink-0">
+                  <Button size="sm" className="text-xs px-2 h-7" onClick={(e) => { e.stopPropagation(); openTradeDialog(crypto, 'buy'); }}>
+                    <Plus className="size-3 mr-1" /> {t('crypto.buy')}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openTradeDialog(crypto, 'sell'); }}>
-                    <Minus className="size-3 mr-1" /> Sell
+                  <Button size="sm" variant="outline" className="text-xs px-2 h-7" onClick={(e) => { e.stopPropagation(); openTradeDialog(crypto, 'sell'); }}>
+                    <Minus className="size-3 mr-1" /> {t('crypto.sell')}
                   </Button>
                 </div>
               </div>
@@ -485,8 +488,8 @@ export default function CryptoMarket() {
       {portfolio.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>My Crypto Portfolio</CardTitle>
-            <CardDescription>Your current holdings</CardDescription>
+            <CardTitle>{t('crypto.my_portfolio')}</CardTitle>
+            <CardDescription>{t('crypto.holdings')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -513,7 +516,7 @@ export default function CryptoMarket() {
                         </p>
                       </div>
                       <Button size="sm" variant="outline" onClick={() => openTradeDialog(crypto, 'sell')}>
-                        Sell
+                        {t('crypto.sell')}
                       </Button>
                     </div>
                   </div>
@@ -532,7 +535,7 @@ export default function CryptoMarket() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {tradeType === 'buy' ? 'Buy' : 'Sell'} {selectedCrypto?.symbol}
+              {tradeType === 'buy' ? t('crypto.buy') : t('crypto.sell')} {selectedCrypto?.symbol}
             </DialogTitle>
             <DialogDescription>
               {selectedCrypto?.name}
@@ -561,23 +564,23 @@ export default function CryptoMarket() {
                 </ResponsiveContainer>
               </div>
               <div className="grid grid-cols-2 gap-4 p-4 rounded-lg bg-muted">
-                <div><p className="text-sm text-muted-foreground">Current Price</p><p className="text-lg font-bold">{formatCurrency(selectedCrypto.price)}</p></div>
-                <div><p className="text-sm text-muted-foreground">24h Change</p><p className={`text-lg font-bold ${selectedCrypto.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>{selectedCrypto.changePercent >= 0 ? '+' : ''}{selectedCrypto.changePercent.toFixed(2)}%</p></div>
+                <div><p className="text-sm text-muted-foreground">{t('crypto.current_price')}</p><p className="text-lg font-bold">{formatCurrency(selectedCrypto.price)}</p></div>
+                <div><p className="text-sm text-muted-foreground">{t('crypto.change_24h')}</p><p className={`text-lg font-bold ${selectedCrypto.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>{selectedCrypto.changePercent >= 0 ? '+' : ''}{selectedCrypto.changePercent.toFixed(2)}%</p></div>
               </div>
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium mb-2 block">Quantity ({selectedCrypto.symbol})</label>
+                  <label className="text-sm font-medium mb-2 block">{t('crypto.quantity')} ({selectedCrypto.symbol})</label>
                   <Input type="number" step="0.01" min="0.01" value={tradeQuantity} onChange={(e) => setTradeQuantity(parseFloat(e.target.value) || 0)} />
                 </div>
                 <div className="p-4 rounded-lg bg-muted">
                   <div className="flex justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">Total Value</span>
+                    <span className="text-sm text-muted-foreground">{t('crypto.total_value')}</span>
                     <span className="font-bold">{formatCurrency(selectedCrypto.price * tradeQuantity)}</span>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button className="flex-1" variant={tradeType === 'buy' ? 'default' : 'outline'} onClick={handleBuy}>Buy</Button>
-                  <Button className="flex-1" variant={tradeType === 'sell' ? 'default' : 'outline'} onClick={handleSell}>Sell</Button>
+                  <Button className="flex-1" variant={tradeType === 'buy' ? 'default' : 'outline'} onClick={handleBuy}>{t('crypto.buy')}</Button>
+                  <Button className="flex-1" variant={tradeType === 'sell' ? 'default' : 'outline'} onClick={handleSell}>{t('crypto.sell')}</Button>
                 </div>
               </div>
             </div>

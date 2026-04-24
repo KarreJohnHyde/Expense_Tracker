@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -113,6 +114,7 @@ const STOCK_SEED: Stock[] = MOCK_STOCKS.map((s) => ({
 }));
 
 export default function StockMarket() {
+  const { t } = useTranslation();
   const { formatCurrency } = useCurrency();
   const [stocks, setStocks] = useState<Stock[]>(STOCK_SEED);
   const [filteredStocks, setFilteredStocks] = useState<Stock[]>(STOCK_SEED);
@@ -362,13 +364,13 @@ export default function StockMarket() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Stock Market</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t('stock.title')}</h1>
         <p className="text-muted-foreground">
           {marketStatus.configured ? 'Live stock prices via Twelve Data' : 'Demo stock prices (configure live data)'}
         </p>
         <div className="flex items-center gap-2 mt-2">
           <Badge variant={marketStatus.configured ? 'default' : 'secondary'} className={marketStatus.configured ? 'animate-pulse' : ''}>
-            {marketStatus.configured ? 'LIVE' : 'DEMO'}
+            {marketStatus.configured ? t('stock.live') : t('stock.demo')}
           </Badge>
           <span className="text-sm text-muted-foreground">
             {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })} | 
@@ -376,7 +378,7 @@ export default function StockMarket() {
           </span>
           {lastUpdated && (
             <Badge variant="outline" className="text-xs">
-              Updated: {lastUpdated}
+              {t('stock.updated')}: {lastUpdated}
             </Badge>
           )}
           {loading && (
@@ -393,7 +395,7 @@ export default function StockMarket() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Portfolio Value</p>
+                <p className="text-sm text-muted-foreground">{t('stock.portfolio_value')}</p>
                 <p className="text-2xl font-bold">{formatCurrency(portfolioValue)}</p>
               </div>
               <Briefcase className="size-8 text-primary" />
@@ -405,7 +407,7 @@ export default function StockMarket() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Investment</p>
+                <p className="text-sm text-muted-foreground">{t('stock.total_investment')}</p>
                 <p className="text-2xl font-bold">{formatCurrency(portfolioInvestment)}</p>
               </div>
               <DollarSign className="size-8 text-blue-500" />
@@ -417,7 +419,7 @@ export default function StockMarket() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total P&L</p>
+                <p className="text-sm text-muted-foreground">{t('stock.total_pnl')}</p>
                 <p className={`text-2xl font-bold ${portfolioProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {portfolioProfit >= 0 ? '+' : ''}{formatCurrency(Math.abs(portfolioProfit))}
                 </p>
@@ -435,7 +437,7 @@ export default function StockMarket() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Returns</p>
+                <p className="text-sm text-muted-foreground">{t('stock.returns')}</p>
                 <p className={`text-2xl font-bold ${portfolioProfitPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {portfolioProfitPercent >= 0 ? '+' : ''}{portfolioProfitPercent.toFixed(2)}%
                 </p>
@@ -453,7 +455,7 @@ export default function StockMarket() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
-                placeholder="Search stocks..."
+                placeholder={t('stock.search')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -461,7 +463,7 @@ export default function StockMarket() {
             </div>
             <Select value={selectedSector} onValueChange={setSelectedSector}>
               <SelectTrigger className="w-full md:w-[200px]">
-                <SelectValue placeholder="Select Sector" />
+                <SelectValue placeholder={t('stock.select_sector')} />
               </SelectTrigger>
               <SelectContent>
                 {SECTORS.map(sector => (
@@ -476,8 +478,8 @@ export default function StockMarket() {
       {/* Stock List */}
       <Card>
         <CardHeader>
-          <CardTitle>Live Market</CardTitle>
-          <CardDescription>Live stock prices (auto-refreshes every 15 seconds)</CardDescription>
+          <CardTitle>{t('stock.live_market')}</CardTitle>
+          <CardDescription>{t('stock.live_desc')}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
@@ -515,27 +517,29 @@ export default function StockMarket() {
                   </div>
                 </div>
 
-                <div className="ml-4 flex gap-2">
+                <div className="ml-2 flex flex-row flex-wrap gap-1 shrink-0">
                   <Button
                     size="sm"
+                    className="text-xs px-2 h-7"
                     onClick={(e) => {
                       e.stopPropagation();
                       openTradeDialog(stock, 'buy');
                     }}
                   >
                     <Plus className="size-3 mr-1" />
-                    Buy
+                    {t('stock.buy')}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
+                    className="text-xs px-2 h-7"
                     onClick={(e) => {
                       e.stopPropagation();
                       openTradeDialog(stock, 'sell');
                     }}
                   >
                     <Minus className="size-3 mr-1" />
-                    Sell
+                    {t('stock.sell')}
                   </Button>
                 </div>
               </motion.div>
@@ -558,9 +562,9 @@ export default function StockMarket() {
       {portfolio.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>My Portfolio</CardTitle>
-            <CardDescription>Your current holdings</CardDescription>
-          </CardHeader>
+          <CardTitle>{t('stock.my_portfolio')}</CardTitle>
+          <CardDescription>{t('stock.holdings')}</CardDescription>
+        </CardHeader>
           <CardContent>
             <div className="space-y-2">
               {portfolio.map(position => {
@@ -578,7 +582,7 @@ export default function StockMarket() {
                       <div>
                         <p className="font-semibold">{position.symbol}</p>
                         <p className="text-sm text-muted-foreground">
-                          {position.quantity} shares @ avg {formatCurrency(position.buyPrice)}
+                          {position.quantity} {t('stock.shares')} @ {t('stock.avg')} {formatCurrency(position.buyPrice)}
                         </p>
                       </div>
 
@@ -594,7 +598,7 @@ export default function StockMarket() {
                         variant="outline"
                         onClick={() => openTradeDialog(stock, 'sell')}
                       >
-                        Sell
+                        {t('stock.sell')}
                       </Button>
                     </div>
                   </div>
@@ -610,7 +614,7 @@ export default function StockMarket() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {tradeType === 'buy' ? 'Buy' : 'Sell'} {selectedStock?.symbol}
+              {tradeType === 'buy' ? t('stock.buy') : t('stock.sell')} {selectedStock?.symbol}
             </DialogTitle>
             <DialogDescription>
               {selectedStock?.name}
@@ -655,21 +659,21 @@ export default function StockMarket() {
               {/* Stock Details */}
               <div className="grid grid-cols-2 gap-4 p-4 rounded-lg bg-muted">
                 <div>
-                  <p className="text-sm text-muted-foreground">Current Price</p>
+                  <p className="text-sm text-muted-foreground">{t('stock.current_price')}</p>
                   <p className="text-lg font-bold">{formatCurrency(selectedStock.price)}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Day Change</p>
+                  <p className="text-sm text-muted-foreground">{t('stock.day_change')}</p>
                   <p className={`text-lg font-bold ${selectedStock.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {selectedStock.change >= 0 ? '+' : ''}{selectedStock.changePercent.toFixed(2)}%
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Day High</p>
+                  <p className="text-sm text-muted-foreground">{t('stock.day_high')}</p>
                   <p className="font-semibold">{formatCurrency(selectedStock.high)}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Day Low</p>
+                  <p className="text-sm text-muted-foreground">{t('stock.day_low')}</p>
                   <p className="font-semibold">{formatCurrency(selectedStock.low)}</p>
                 </div>
               </div>
@@ -677,7 +681,7 @@ export default function StockMarket() {
               {/* Trade Form */}
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium mb-2 block">Quantity</label>
+                  <label className="text-sm font-medium mb-2 block">{t('stock.quantity')}</label>
                   <Input
                     type="number"
                     min="1"
@@ -688,7 +692,7 @@ export default function StockMarket() {
 
                 <div className="p-4 rounded-lg bg-muted">
                   <div className="flex justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">Total Value</span>
+                    <span className="text-sm text-muted-foreground">{t('stock.total_value')}</span>
                     <span className="font-bold">{formatCurrency(selectedStock.price * tradeQuantity)}</span>
                   </div>
                 </div>
@@ -699,14 +703,14 @@ export default function StockMarket() {
                     variant={tradeType === 'buy' ? 'default' : 'outline'}
                     onClick={handleBuy}
                   >
-                    Buy
+                    {t('stock.buy')}
                   </Button>
                   <Button
                     className="flex-1"
                     variant={tradeType === 'sell' ? 'default' : 'outline'}
                     onClick={handleSell}
                   >
-                    Sell
+                    {t('stock.sell')}
                   </Button>
                 </div>
               </div>
