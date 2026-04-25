@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Search, FileText, FileSpreadsheet, Sparkles, Calendar, Camera, TrendingUp, Zap, Filter, Repeat, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Search, FileText, FileSpreadsheet, Sparkles, Calendar, Camera, TrendingUp, Zap, Filter, Repeat, ArrowRight, ShieldCheck, Activity, ChevronRight } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/card';
 import { auth } from '../lib/auth';
 import { useNavigate } from 'react-router';
@@ -425,6 +425,47 @@ export default function Dashboard() {
               </Button>
            </div>
         )}
+
+        {/* Market Momentum — Branded Stock/Crypto boxes */}
+        <div style={{ gridColumn: 'span 12' }} className="glass-card border border-border/40 p-5 card-hover">
+           <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                 <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                    <Activity className="size-4" />
+                 </div>
+                 <h3 className="font-bold tracking-tight">Market Momentum</h3>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" className="text-xs" onClick={() => navigate('/stock-market')}>Stocks</Button>
+                <Button variant="ghost" size="sm" className="text-xs" onClick={() => navigate('/crypto-market')}>Crypto <ChevronRight className="size-3 ml-1" /></Button>
+              </div>
+           </div>
+           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                { name: 'TCS', price: '₹3,450', change: '+1.33%', type: 'stock', color: '#5f259f' },
+                { name: 'Reliance', price: '₹2,456', change: '+1.17%', type: 'stock', color: '#4285f4' },
+                { name: 'Bitcoin', price: '₹52,40,120', change: '+2.45%', type: 'crypto', color: '#f7931a' },
+                { name: 'Ethereum', price: '₹3,12,450', change: '-0.82%', type: 'crypto', color: '#627eea' }
+              ].map(item => (
+                <div key={item.name} className="p-3 rounded-xl bg-muted/20 border border-border/50 flex flex-col justify-between group relative overflow-hidden">
+                   <div className="absolute top-0 right-0 p-1 opacity-10">
+                      {item.type === 'stock' ? <TrendingUp className="size-8" /> : <Zap className="size-8" />}
+                   </div>
+                   <div>
+                      <div className="flex items-center justify-between mb-1">
+                         <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{item.name}</span>
+                         <span className={`text-[10px] font-bold ${item.change.startsWith('+') ? 'text-green-500' : 'text-red-500'}`}>{item.change}</span>
+                      </div>
+                      <p className="text-sm font-black">{item.price}</p>
+                   </div>
+                   <div className="flex gap-2 mt-3 relative z-10">
+                      <Button size="sm" variant="outline" className="h-7 text-[10px] flex-1 border-green-500/30 hover:bg-green-500/10 hover:text-green-600 font-bold" onClick={(e) => { e.stopPropagation(); navigate(item.type === 'stock' ? '/stock-market' : '/crypto-market'); }}>BUY</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-[10px] flex-1 border-red-500/30 hover:bg-red-500/10 hover:text-red-600 font-bold" onClick={(e) => { e.stopPropagation(); navigate(item.type === 'stock' ? '/stock-market' : '/crypto-market'); }}>SELL</Button>
+                   </div>
+                </div>
+              ))}
+           </div>
+        </div>
 
         {/* Spending Chart — wide */}
         <div
