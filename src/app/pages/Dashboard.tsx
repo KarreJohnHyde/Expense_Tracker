@@ -8,6 +8,7 @@ import { SpendingChart } from '../components/SpendingChart';
 import { VoiceExpenseInput } from '../components/VoiceExpenseInput';
 import { ForecastCard } from '../components/ForecastCard';
 import { SavingsAdvisor } from '../components/SavingsAdvisor';
+import { FinancialTicker } from '../components/FinancialTicker';
 import { api } from '../lib/api';
 import { Skeleton } from '../components/ui/skeleton';
 import { toast } from 'sonner';
@@ -224,6 +225,8 @@ export default function Dashboard() {
   return (
     <div className="space-y-5 animate-fade-in-up">
 
+
+
       {/* ── Hero Banner ─────────────────────────────────────────────────── */}
       <div className="relative overflow-hidden rounded-2xl p-6 lg:p-8"
         style={{
@@ -287,6 +290,11 @@ export default function Dashboard() {
             />
           </div>
         </div>
+      </div>
+
+      {/* ── Financial Ticker ───────────────────────────────────────────── */}
+      <div className="animate-fade-in-up-delay-1">
+        <FinancialTicker />
       </div>
 
       {/* ── Quick Actions ─────────────────────────────────────────────── */}

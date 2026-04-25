@@ -1,5 +1,5 @@
 import { createBrowserRouter, Navigate } from "react-router";
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import React from "react";
 import Root from "./pages/Root";
 import ErrorPage from "./pages/ErrorPage";
@@ -24,6 +24,7 @@ const Gallery = lazy(() => import("./pages/Gallery"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions"));
 const ReconciliationView = lazy(() => import("./pages/ReconciliationView"));
 const About = lazy(() => import("./pages/About"));
+const Messaging = lazy(() => import("./pages/Messaging"));
 
 function RouteFallback() {
   return (
@@ -39,8 +40,20 @@ function withRouteLoader(element: React.ReactElement) {
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const user = auth.getCurrentUser();
-  if (!user) {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    // Check async session
+    auth.getSession().then(({ user }) => {
+      setIsAuthenticated(!!user);
+    });
+  }, []);
+
+  if (isAuthenticated === null) {
+    return <RouteFallback />;
+  }
+
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
@@ -75,7 +88,8 @@ export const router = createBrowserRouter([
       { path: "qr-generator", element: withRouteLoader(<QRGenerator />) },
       { path: "reconciliation", element: withRouteLoader(<ReconciliationView />) },
       { path: "automations", element: withRouteLoader(<Webhooks />) },
-      { path: "profile", element: withRouteLoader(<Profile />) },
+      { path: "messaging",   element: withRouteLoader(<Messaging />) },
+      { path: "profile",     element: withRouteLoader(<Profile />) },
       { path: "about", element: withRouteLoader(<About />) },
       { path: "settings", element: withRouteLoader(<Settings />) },
     ],

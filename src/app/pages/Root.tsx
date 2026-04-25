@@ -27,7 +27,8 @@ import {
   Image as ImageIcon,
   PanelLeftClose,
   PanelLeft,
-  Repeat
+  Repeat,
+  Mail,
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
@@ -54,6 +55,7 @@ const navigation = [
   { name: 'nav.crypto',        href: '/crypto',       icon: Bitcoin },
   { name: 'nav.wallets',       href: '/wallets',      icon: Smartphone },
   { name: 'nav.sms',           href: '/sms-parser',   icon: MessageSquare },
+  { name: 'nav.messaging',     href: '/messaging',    icon: Mail },
   { name: 'nav.scan',          href: '/scan-receipt', icon: ScanLine },
   { name: 'nav.gallery',       href: '/gallery',      icon: ImageIcon },
   { name: 'nav.qr',            href: '/qr-generator', icon: QrCode },

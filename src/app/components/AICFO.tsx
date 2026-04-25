@@ -154,7 +154,7 @@ export function AICFO({ isCompact = false }: { isCompact?: boolean }) {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0, opacity: 0 }}
               onClick={() => setIsOpen(true)}
-              className="fixed bottom-6 right-6 z-40 size-14 rounded-full gradient-primary shadow-xl hover:shadow-primary/40 flex items-center justify-center transition-all hover:scale-110 sm:left-6 sm:right-auto"
+              className="fixed bottom-24 right-4 z-50 size-14 rounded-full gradient-primary shadow-xl hover:shadow-primary/40 flex items-center justify-center transition-all hover:scale-110"
             >
               <Cpu className="size-6 text-white" />
             </motion.button>

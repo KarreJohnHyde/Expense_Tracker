@@ -225,7 +225,7 @@ export const auth = {
     return { error: null };
   },
 
-  // Get current user
+  // Get current user (synchronous fallback)
   getCurrentUser(): User | null {
     if (currentUser) return currentUser;
     const storedUser = localStorage.getItem('user');
@@ -234,6 +234,31 @@ export const auth = {
       return currentUser;
     }
     return null;
+  },
+
+  // Get session asynchronously from Supabase
+  async getSession(): Promise<{ user: User | null; error: Error | null }> {
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      if (data.session?.user) {
+        const user = toLocalUser(data.session.user);
+        currentUser = user;
+        localStorage.setItem('user', JSON.stringify(user));
+        return { user, error: null };
+      }
+      
+      // If Supabase has no session, check if we have a local fallback user (demo mode)
+      const localUser = this.getCurrentUser();
+      if (localUser) {
+        return { user: localUser, error: null };
+      }
+      
+      return { user: null, error: null };
+    } catch (err) {
+      console.warn('[auth] Supabase getSession unavailable, falling back to local', err);
+      return { user: this.getCurrentUser(), error: null };
+    }
   },
 
   // Get user bank accounts
