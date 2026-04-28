@@ -10,10 +10,10 @@ import {
   Activity, Send, ChevronDown, ChevronUp, CheckCircle, XCircle, Loader2
 } from 'lucide-react';
 import { auth } from '../lib/auth';
+import { runtimeConfig } from '../lib/runtimeConfig';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-const _meta = (import.meta as any).env || {};
-const WEBHOOK_BASE_URL = (_meta.VITE_WEBHOOK_BASE_URL as string) || 'https://yghrnwlwfdadlnzhqhdp.supabase.co/functions/v1';
+const WEBHOOK_BASE_URL = runtimeConfig.webhookBaseUrl;
 
 interface WebhookLog {
   id: string;
@@ -24,12 +24,25 @@ interface WebhookLog {
   token: string;
 }
 
+function generateSecureToken(): string {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `exp_${hex}`;
+}
+
 export default function Webhooks() {
   const user = auth.getCurrentUser();
+  const storageKey = `expenseai:webhook_token:${user?.id || 'demo'}`;
+
+  const [apiKey, setApiKey] = useState(() => {
+    const existing = localStorage.getItem(storageKey);
+    if (existing) return existing;
+    const generated = generateSecureToken();
+    localStorage.setItem(storageKey, generated);
+    return generated;
+  });
   const [copied, setCopied] = useState(false);
-  const [apiKey, setApiKey] = useState(
-    user?.id ? `exp_${btoa(user.id).replace(/=/g, '')}_${Date.now().toString(36)}` : 'exp_demo_key_xyz123'
-  );
   const [baseUrl, setBaseUrl] = useState(WEBHOOK_BASE_URL);
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [testLoading, setTestLoading] = useState(false);
@@ -38,7 +51,7 @@ export default function Webhooks() {
   const [showLogs, setShowLogs] = useState(false);
   const [logsLoading, setLogsLoading] = useState(false);
 
-  const webhookUrl = `${baseUrl}/v1/webhooks/sms-sync?token=${apiKey}`;
+  const webhookUrl = `${baseUrl}/v1/webhooks/sms-sync`;
 
   const checkServerStatus = useCallback(async () => {
     try {
@@ -82,7 +95,9 @@ export default function Webhooks() {
   };
 
   const regenerateKey = () => {
-    setApiKey(`exp_${btoa(user?.id || 'demo').replace(/=/g, '')}_${Date.now().toString(36)}`);
+    const next = generateSecureToken();
+    setApiKey(next);
+    localStorage.setItem(storageKey, next);
     toast.success('Generated new Webhook security token');
   };
 
@@ -96,7 +111,10 @@ export default function Webhooks() {
     try {
       const res = await fetch(webhookUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-webhook-token': apiKey,
+        },
         body: JSON.stringify({
           sender: 'HP-HDFCBK',
           text: 'Rs.5000 debited from A/c XX1234 on 14-Aug. Avl Bal: Rs.23,456. If not done by you, call 1800-XXX-XXXX.',
@@ -211,8 +229,17 @@ export default function Webhooks() {
               </div>
               <p className="text-xs text-yellow-600 dark:text-yellow-500 flex items-center gap-1.5">
                 <AlertCircle className="size-3.5" />
-                Keep this URL secret. Anyone with this link can push expenses to your account.
+                Keep your token secret. Use it in request header `x-webhook-token`.
               </p>
+              <div className="space-y-2">
+                <Label>Webhook Security Token</Label>
+                <div className="flex gap-2">
+                  <Input readOnly value={apiKey} className="font-mono text-xs bg-muted" />
+                  <Button variant="secondary" onClick={regenerateKey} className="shrink-0">
+                    <RefreshCw className="size-4" />
+                  </Button>
+                </div>
+              </div>
 
               {/* Test Webhook */}
               <div className="space-y-2">
@@ -262,9 +289,10 @@ export default function Webhooks() {
             <CardContent>
               <pre className="bg-muted p-4 rounded-lg font-mono text-sm overflow-x-auto text-green-600 dark:text-green-400">
 {`{
+  "headers": { "x-webhook-token": "${apiKey.slice(0, 12)}..." },
   "sender": "HP-HDFCBK",
   "text": "Rs.5000 debited from A/c XX1234 on 14-Aug.",
-  "timestamp": "${new Date().toISOString()}"
+  "timestamp": "2026-04-28T00:00:00.000Z"
 }`}
               </pre>
             </CardContent>

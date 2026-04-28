@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Sparkles, TrendingUp, AlertCircle, Lightbulb, Brain, ArrowDown } from 'lucide-react';
@@ -29,13 +29,7 @@ export function AIInsights() {
   const [predictions, setPredictions] = useState<Prediction | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadInsights();
-    window.addEventListener('expenseai:edge:expenses_updated', loadInsights);
-    return () => window.removeEventListener('expenseai:edge:expenses_updated', loadInsights);
-  }, []);
-
-  const loadInsights = async () => {
+  const loadInsights = useCallback(async () => {
     setLoading(true);
     try {
       const [insightsData, predictionsData] = await Promise.all([
@@ -49,7 +43,13 @@ export function AIInsights() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadInsights();
+    window.addEventListener('expenseai:edge:expenses_updated', loadInsights);
+    return () => window.removeEventListener('expenseai:edge:expenses_updated', loadInsights);
+  }, [loadInsights]);
 
   const getInsightIcon = (type: string) => {
     switch (type) {

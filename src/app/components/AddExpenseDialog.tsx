@@ -5,16 +5,18 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import { Camera, Plus, Sparkles, QrCode, RefreshCw, Split, Tag, MapPin, AlarmClock, Edit, Crop, ImageIcon, Wand2 } from 'lucide-react';
+import { Camera, Plus, Sparkles, QrCode, RefreshCw, Split, Tag, MapPin, AlarmClock, Edit, Crop, Wand2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { Badge } from './ui/badge';
 import { useCurrency } from '../lib/currency';
 import { classifyExpense } from '../lib/classifier';
 import { EXPENSE_CATEGORIES, type ExpenseSource } from '../lib/expenseSchema';
-import { compressImage, optimizeImageForWeb, validateImage } from '../lib/imageUtils';
+import { compressImage, validateImage } from '../lib/imageUtils';
 import { ImageCropper } from './ImageCropper';
-import { ImageFilter, type ImageFilterOptions } from './ImageFilter';
+import { ImageFilter } from './ImageFilter';
+import { enhanceImage, extractReceiptFieldsFromText } from '../lib/imageProcessing';
+import { runLocalOcr } from '../lib/ocrEngine';
 
 const CATEGORIES = [...EXPENSE_CATEGORIES];
 
@@ -171,7 +173,7 @@ export function AddExpenseDialog({
     }
   }, [formData.description]);
 
-  const handleAICategorization = async () => {
+  async function handleAICategorization() {
     if (!formData.description) return;
     setAiLoading(true);
     try {
@@ -189,7 +191,7 @@ export function AddExpenseDialog({
     } finally {
       setAiLoading(false);
     }
-  };
+  }
 
   const resetForm = () => {
     setFormData({
@@ -268,18 +270,27 @@ export function AddExpenseDialog({
     setEntrySource('receipt_scan');
     setLoading(true);
     try {
-      const tesseractMod = await import('tesseract.js');
-      const recognize = tesseractMod.recognize || (tesseractMod as { default?: { recognize?: unknown } }).default?.recognize || (tesseractMod as unknown as { default: unknown }).default;
-      const result = await (recognize as (src: string, lang: string, opts: Record<string, unknown>) => Promise<{ data: { text: string } }>)(imageSrc, 'eng', { logger: () => {} });
-      const text = result.data.text;
+      const enhanced = await enhanceImage(imageSrc, {
+        grayscale: true,
+        contrast: 2.1,
+        brightness: 1.08,
+        threshold: 0.53,
+      });
 
-      const amountMatch = text.match(/(?:total|amount|rs|₹|\$)\s*:?\s*([\d,]+(?:\.\d{2})?)/i) ||
-        text.match(/[\d,]+\.\d{2}/);
+      const text =
+        (await runLocalOcr(enhanced, { maxLanguages: 3 })) ||
+        (await runLocalOcr(imageSrc, { maxLanguages: 2 }));
 
-      const newFormData = { ...formData, description: text.slice(0, 50).trim() + '...' };
-      if (amountMatch && parseFloat(amountMatch[amountMatch.length > 1 ? 1 : 0].replace(',', '')) > 0) {
-        newFormData.amount = parseFloat(amountMatch[amountMatch.length > 1 ? 1 : 0].replace(',', '')).toString();
-      }
+      const parsed = extractReceiptFieldsFromText(text);
+      const descriptionSeed = parsed.description || text.slice(0, 60).trim() || 'Receipt';
+
+      const newFormData = {
+        ...formData,
+        description: descriptionSeed,
+        amount: parsed.amount > 0 ? parsed.amount.toString() : formData.amount,
+        date: parsed.date || formData.date,
+        paymentMethod: parsed.paymentMethod || formData.paymentMethod,
+      };
       setFormData(newFormData);
       toast.success('Extracted info from receipt!');
       setTimeout(() => handleAICategorization(), 500);

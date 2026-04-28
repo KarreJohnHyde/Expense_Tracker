@@ -156,6 +156,69 @@ export async function extractTextPatterns(text: string): Promise<{
   };
 }
 
+export interface ParsedReceiptFields {
+  description: string;
+  amount: number;
+  date: string;
+  paymentMethod: string;
+}
+
+export function extractReceiptFieldsFromText(rawText: string): ParsedReceiptFields {
+  const text = normalizeText(rawText || '');
+  const lowered = text.toLowerCase();
+
+  const totalMatch =
+    lowered.match(/(?:grand\s+total|total\s+amount|total|amount\s+due)\s*[:\-]?\s*(?:rs\.?|inr|₹|\$)?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i) ||
+    lowered.match(/(?:rs\.?|inr|₹|\$)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i);
+
+  const amountFromTotal = totalMatch?.[1] ? Number.parseFloat(totalMatch[1].replace(/,/g, '')) : NaN;
+  const allNumbers = Array.from(lowered.matchAll(/\b([0-9]{2,}(?:\.[0-9]{1,2})?)\b/g))
+    .map((entry) => Number.parseFloat(entry[1]))
+    .filter((entry) => Number.isFinite(entry) && entry > 0 && entry < 1_000_000);
+
+  const amount = Number.isFinite(amountFromTotal)
+    ? amountFromTotal
+    : allNumbers.length > 0
+      ? Math.max(...allNumbers)
+      : 0;
+
+  const dateRegex =
+    /(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})|(\d{4})[-/](\d{1,2})[-/](\d{1,2})/;
+  const match = lowered.match(dateRegex);
+  let date = new Date().toISOString().split('T')[0];
+  if (match) {
+    if (match[1]) {
+      const day = match[1].padStart(2, '0');
+      const month = match[2].padStart(2, '0');
+      const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+      date = `${year}-${month}-${day}`;
+    } else if (match[4]) {
+      const year = match[4];
+      const month = match[5].padStart(2, '0');
+      const day = match[6].padStart(2, '0');
+      date = `${year}-${month}-${day}`;
+    }
+  }
+
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 2 && !/^[\d\s.,\-:]+$/.test(line));
+  const description = lines[0]?.slice(0, 80) || 'Receipt';
+
+  let paymentMethod = 'Cash';
+  if (/(upi|gpay|phonepe|paytm)/i.test(lowered)) paymentMethod = 'UPI';
+  if (/(credit\s*card|visa|mastercard|amex)/i.test(lowered)) paymentMethod = 'Credit Card';
+  if (/(debit\s*card|atm\s*card)/i.test(lowered)) paymentMethod = 'Debit Card';
+
+  return {
+    description,
+    amount: Number.isFinite(amount) ? Number.parseFloat(amount.toFixed(2)) : 0,
+    date,
+    paymentMethod,
+  };
+}
+
 // ── Text Normalization ────────────────────────────────────────────────────
 
 export function normalizeText(text: string): string {
@@ -254,40 +317,29 @@ export async function extractPixelBasedText(imageBase64: string): Promise<string
       const pixelWidth = canvas.width;
       const rowHeight = Math.max(1, Math.floor(pixelHeight / 50)); // Divide into ~50 potential text lines
 
-      // Sample every row to detect text lines
+      // Sample rows to detect likely text bands
       for (let row = 0; row < pixelHeight; row += rowHeight) {
         let darkPixelsInRow = 0;
-        let darkPixelCount = 0;
 
         for (let col = 0; col < pixelWidth; col += 2) {
           const pixelIndex = (row * pixelWidth + col) * 4;
           const brightness = (data[pixelIndex] + data[pixelIndex + 1] + data[pixelIndex + 2]) / 3;
           if (brightness < 200) {
             darkPixelsInRow++;
-            darkPixelCount++;
           }
         }
 
-        // If row has significant dark pixels, it likely contains text
+        // If row has significant dark pixels, it likely contains text.
         const darkRatio = darkPixelsInRow / (pixelWidth / 2);
         if (darkRatio > 0.05) {
-          // Generate synthetic text line based on dark pixel distribution
           const lineWidth = Math.floor(darkPixelsInRow * 2);
-          const lineDensity = Math.min(99, Math.floor(darkRatio * 100));
-          
-          // Create a text representation
           if (lines.length === 0) {
-            lines.push('Receipt Document Scan');
-            lines.push('─'.repeat(40));
+            lines.push('OCR fallback analysis');
+            lines.push('----------------------------------------');
           }
 
-          // Add synthetic text based on pixel patterns
           if (lineWidth > 100) {
-            lines.push(`Item                                 ${(100 - Math.random() * 30).toFixed(2)}`);
-          } else if (lineWidth > 50) {
-            lines.push(`${' '.repeat(Math.floor(Math.random() * 10))}Details (${lineDensity}% readable)`);
-          } else if (lineWidth > 20) {
-            lines.push(`─`.repeat(Math.min(40, lineWidth / 10)));
+            lines.push(`Text band detected (width ${lineWidth}px)`);
           }
         }
       }
@@ -305,22 +357,14 @@ export async function extractPixelBasedText(imageBase64: string): Promise<string
       const textDensity = (darkPixels / (data.length / 4)) * 100;
 
       if (lines.length === 0) {
-        lines.push('Receipt Scan');
-        lines.push('─'.repeat(40));
+        lines.push('OCR fallback analysis');
+        lines.push('----------------------------------------');
       }
 
-      lines.push('─'.repeat(40));
+      lines.push('----------------------------------------');
       lines.push(`Scan Quality: ${Math.max(0, 100 - textDensity * 2).toFixed(0)}%`);
       lines.push(`Brightness: ${avgBrightness.toFixed(0)}/255`);
       lines.push(`Text Coverage: ${Math.min(99, textDensity).toFixed(1)}%`);
-
-      // Try to extract amounts and totals
-      if (textDensity > 5 && textDensity < 40) {
-        lines.push('');
-        lines.push('--- EXTRACTED DATA ---');
-        lines.push('Receipt contains legible text');
-        lines.push(`Estimated items: ${Math.floor(Math.random() * 5 + 2)}`);
-      }
 
       const result = lines.join('\n');
       resolve(result);

@@ -1,1 +1,0 @@
-import{a as s}from"./vendor-supabase-DROi1T60.js";const a="https://yghrnwlwfdadlnzhqhdp.supabase.co",e="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlnaHJud2x3ZmRhZGxuemhxaGRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MDYxOTksImV4cCI6MjA4OTM4MjE5OX0.-MEafOtWd6wh2cOuMub4C8eerqHkFGk8JV7aj1ivm5c",i=s(a,e);export{i as s};

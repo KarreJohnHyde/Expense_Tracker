@@ -1,12 +1,13 @@
 /* Live market data provider (Twelve Data) with optional local proxy. */
 
+import { runtimeConfig } from './runtimeConfig';
+
 export type MarketProvider = 'twelvedata';
 
-const env = (import.meta as any).env || {};
-const API_MODE = (env.VITE_API_MODE as string) || '';
-const SUPABASE_FUNCTIONS_URL = 'https://yghrnwlwfdadlnzhqhdp.supabase.co/functions/v1';
-const MARKET_API_BASE = ((env.VITE_MARKET_API_BASE as string) || (API_MODE === 'local' ? SUPABASE_FUNCTIONS_URL : '')).trim();
-const TWELVE_KEY = ((env.VITE_TWELVEDATA_API_KEY as string) || '').trim();
+const API_MODE = runtimeConfig.apiMode;
+const SUPABASE_FUNCTIONS_URL = runtimeConfig.edgeApiUrl;
+const MARKET_API_BASE = (runtimeConfig.marketApiBase || (API_MODE === 'local' ? SUPABASE_FUNCTIONS_URL : '')).trim();
+const TWELVE_KEY = runtimeConfig.twelveDataKey;
 
 const DIRECT_BASE = 'https://api.twelvedata.com';
 const API_BASE = MARKET_API_BASE || DIRECT_BASE;

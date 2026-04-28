@@ -12,9 +12,11 @@ import {
   Search, Image as ImageIcon, QrCode, FileText, Calendar,
   Barcode, Camera, X, ScanLine, Tag, CreditCard,
   Trash2, ChevronLeft, ChevronRight, ZoomIn, Eye,
-  Download, Plus, Layers, Edit2, Save, Wand2, AlertTriangle
+  Download, Plus, Layers, Edit2, Save, Wand2, AlertTriangle, RefreshCw
 } from 'lucide-react';
 import { ImageFilter } from '../components/ImageFilter';
+import { enhanceImage } from '../lib/imageProcessing';
+import { runLocalOcr } from '../lib/ocrEngine';
 
 type FilterType = 'all' | 'receipt' | 'qr' | 'barcode';
 type ConfirmActionType = 'delete' | 'clearAll';
@@ -33,6 +35,7 @@ export default function Gallery() {
   const [showFilterOptions, setShowFilterOptions] = useState(false);
   const [isEditingOcr, setIsEditingOcr] = useState(false);
   const [localExtractedText, setLocalExtractedText] = useState('');
+  const [ocrRefreshing, setOcrRefreshing] = useState(false);
   
   const [editForm, setEditForm] = useState<Partial<Expense>>({});
 
@@ -172,6 +175,43 @@ export default function Gallery() {
       toast.error('Failed to update OCR text');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefreshOcr = async () => {
+    if (!lightboxExpense?.receiptImage) return;
+    setOcrRefreshing(true);
+    try {
+      const enhanced = await enhanceImage(lightboxExpense.receiptImage, {
+        grayscale: true,
+        contrast: 2.1,
+        brightness: 1.08,
+        threshold: 0.53,
+      });
+      const text =
+        (await runLocalOcr(enhanced, { maxLanguages: 3 })) ||
+        (await runLocalOcr(lightboxExpense.receiptImage, { maxLanguages: 2 }));
+      if (!text) {
+        toast.error('No OCR text could be extracted');
+        return;
+      }
+
+      const updatedScanData = {
+        ...(lightboxExpense.scanData || { type: 'ocr_receipt', capturedAt: new Date().toISOString() }),
+        rawText: text,
+      };
+      await api.updateExpense(lightboxExpense.id, { scanData: updatedScanData as any });
+      setExpenses((prev) =>
+        prev.map((expense) =>
+          expense.id === lightboxExpense.id ? { ...expense, scanData: updatedScanData as any } : expense,
+        ),
+      );
+      setLocalExtractedText(text);
+      toast.success('OCR refreshed from current image');
+    } catch {
+      toast.error('Failed to refresh OCR');
+    } finally {
+      setOcrRefreshing(false);
     }
   };
 
@@ -324,6 +364,17 @@ export default function Gallery() {
                 </CardDescription>
               </div>
               <div className="flex gap-2">
+                {lightboxExpense?.receiptImage && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={ocrRefreshing}
+                    onClick={handleRefreshOcr}
+                  >
+                    <RefreshCw className={`size-4 mr-2 ${ocrRefreshing ? 'animate-spin' : ''}`} />
+                    Re-run OCR
+                  </Button>
+                )}
                 <Button 
                   variant={isEditingOcr ? 'default' : 'outline'} 
                   size="sm"

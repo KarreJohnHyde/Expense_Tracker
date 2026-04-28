@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { createWorker } from 'tesseract.js';
 import { useNavigate } from 'react-router';
 import Webcam from 'react-webcam';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -13,10 +12,11 @@ import { notifyUser } from '../lib/notifications';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { classifyExpense } from '../lib/classifier';
 import { supabase } from '../../lib/supabaseClient';
-import { smartExtractText, calculateExtractionConfidence } from '../lib/imageProcessing';
+import { smartExtractText, extractReceiptFieldsFromText } from '../lib/imageProcessing';
 import { advancedPreprocess, OCR_PRESETS } from '../lib/advancedImageProcessing';
 import { ImageFilter } from '../components/ImageFilter';
 import { ImageCropper } from '../components/ImageCropper';
+import { runLocalOcr } from '../lib/ocrEngine';
 
 interface ExtractedReceiptInfo {
   Description: string;
@@ -34,97 +34,14 @@ const SHARED_VIDEO_CONSTRAINTS = {
 };
 
 const fallbackRegexExtraction = (rawText: string) => {
-  // Text normalization
-  let text = rawText
-    .replace(/(\d)[oO](\d)/g, '$10$2')    // Fix OCR errors: 1o2 → 102
-    .replace(/[lI1][oO]/g, '10')          // Fix 10
-    .replace(/(\$|₹)\s*[zZ]/gi, '$2')     // Fix $ z → 2
-    .replace(/TOTAL\s*AMOUNT\s*:\s*/gi, 'Total: ')  // Normalize
-    .replace(/\s+/g, ' ')                 // Normalize whitespace
-    .trim();
-  
-  // Extract amounts - try multiple patterns
-  let amounts: number[] = [];
-  
-  // Pattern 1: Currency symbols followed by numbers
-  const currencyMatches = text.match(/(?:Rs|INR|₹|\$|USD)\s*\.?\s*([\d,]+\.?[0-9]{0,2})/gi) || [];
-  amounts.push(...currencyMatches.map(a => parseFloat(a.replace(/[^\d.]/g, ''))));
-  
-  // Pattern 2: TOTAL followed by number
-  const totalMatches = text.match(/(?:total|subtotal|grand total)\s*:?\s*([\d,]+\.?[0-9]{0,2})/gi) || [];
-  amounts.push(...totalMatches.map(a => parseFloat(a.replace(/[^\d.]/g, ''))));
-  
-  // Pattern 3: Just large numbers (likely amounts)
-  const numberMatches = text.match(/\b(\d{2,}(?:\.\d{2})?)\b/g) || [];
-  amounts.push(...numberMatches.map(n => parseFloat(n)));
-  
-  // Filter valid amounts
-  amounts = amounts.filter(a => a > 0 && a < 1000000);
-  const total = amounts.length > 0 ? Math.max(...amounts) : 0;
-  
-  // Extract dates - try multiple formats
-  let dateStr = new Date().toISOString().split('T')[0];
-  
-  // Try DD/MM/YYYY first
-  let dateMatch = text.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
-  if (dateMatch) {
-    const [, day, month, year] = dateMatch;
-    dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  } else {
-    // Try YYYY-MM-DD
-    dateMatch = text.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
-    if (dateMatch) {
-      const [, year, month, day] = dateMatch;
-      dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-    }
-  }
-  
-  // Detect merchant from text
-  const lines = text.split('\n').filter(l => l.trim().length > 3);
-  let merchant = 'Receipt';
-  
-  const merchantKeywords: Record<string, RegExp> = {
-    'Blinkit': /blinkit/i,
-    'Swiggy': /swiggy/i,
-    'Zomato': /zomato/i,
-    'Amazon': /amazon/i,
-    'Flipkart': /flipkart/i,
-    'Myntra': /myntra/i,
-    'Big Basket': /big\s*basket|bigbasket/i,
-    'Uber': /uber/i,
-    'Ola': /\bola\b/i,
-    'McDonald\'s': /mcd|mcdonalds/i,
-    'Starbucks': /starbucks/i,
-    'Dominos': /dominos|domino\'?s/i,
-  };
-  
-  for (const [name, regex] of Object.entries(merchantKeywords)) {
-    if (regex.test(text)) {
-      merchant = name;
-      break;
-    }
-  }
-  
-  // If no known merchant, use first significant line
-  if (merchant === 'Receipt' && lines.length > 0) {
-    // Skip lines that are just dashes or repeat characters
-    for (const line of lines) {
-      if (!/^[─=\-_=]{3,}$/.test(line) && !line.match(/^\d+\s*%/) && line.length > 3) {
-        merchant = line.substring(0, 50).trim();
-        break;
-      }
-    }
-  }
-  
-  // Classify category based on merchant and text
-  const prediction = classifyExpense(text);
-
+  const parsed = extractReceiptFieldsFromText(rawText);
+  const prediction = classifyExpense(rawText || parsed.description);
   return {
-    Description: merchant,
-    Amount: total,
+    Description: parsed.description,
+    Amount: parsed.amount,
     Category: prediction.category,
-    Date: dateStr,
-    PaymentMethod: 'Cash'
+    Date: parsed.date,
+    PaymentMethod: parsed.paymentMethod,
   };
 };
 
@@ -357,10 +274,14 @@ Timestamp: ${new Date().toLocaleTimeString()}
 
   const extractTextLocal = async (imageBase64: string): Promise<string> => {
     try {
-      const worker = await createWorker('eng');
-      const { data: { text } } = await worker.recognize(imageBase64);
-      await worker.terminate();
-      return text;
+      return await runLocalOcr(imageBase64, {
+        maxLanguages: 3,
+        onProgress: (progress, status) => {
+          if (progress % 25 === 0) {
+            setOcrText(`OCR ${status} (${progress}%)...`);
+          }
+        },
+      });
     } catch (e) {
       console.error('Tesseract JS error:', e);
       return '';

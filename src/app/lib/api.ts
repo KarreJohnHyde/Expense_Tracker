@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { normalizeExpenseCategory, type ExpenseSource } from './expenseSchema';
 import { auth } from './auth';
+import { hasEdgeApi, runtimeConfig } from './runtimeConfig';
 
-const _meta = (import.meta as any).env || {};
-const PYTHON_API_URL = (_meta.VITE_PYTHON_API_URL as string) || 'http://127.0.0.1:3000';
-const EDGE_API_URL = (_meta.VITE_API_URL as string) || 'https://yghrnwlwfdadlnzhqhdp.supabase.co/functions/v1';
+const PYTHON_API_URL = runtimeConfig.pythonApiUrl;
+const EDGE_API_URL = runtimeConfig.edgeApiUrl;
 
 export interface Expense {
   id: string;
@@ -132,6 +132,7 @@ function saveLocalBudgets(budgets: Budget[]) {
 }
 
 const triggerIntegrations = async (expense: Expense, action: string) => {
+  if (!hasEdgeApi) return;
   try {
      const whatsappNumber = localStorage.getItem('integration_whatsapp');
      const sheetId = localStorage.getItem('integration_sheet_id');

@@ -410,6 +410,7 @@ app.get('/v1/webhooks/sms-sync', (req, res) => {
         <div class="badge">✅ ONLINE</div>
         <p>This endpoint accepts <strong>POST</strong> requests with bank SMS payloads for auto-categorization.</p>
         <pre>{
+  "headers": { "x-webhook-token": "exp_your_secret_token" },
   "sender": "HP-HDFCBK",
   "text": "Rs.5000 debited from A/c XX1234",
   "timestamp": "${new Date().toISOString()}"
@@ -423,11 +424,20 @@ app.get('/v1/webhooks/sms-sync', (req, res) => {
 
 // ── SMS Sync Webhook (POST) ──────────────────────────────────────────
 app.post('/v1/webhooks/sms-sync', (req, res) => {
-  const token = req.query.token;
+  const headerToken = req.headers['x-webhook-token'] || req.headers['x-api-key'];
+  const authHeader = req.headers.authorization;
+  const bearerToken = typeof authHeader === 'string' && authHeader.toLowerCase().startsWith('bearer ')
+    ? authHeader.slice(7).trim()
+    : '';
+  const queryToken = req.query.token;
+  const token = (typeof headerToken === 'string' && headerToken.trim())
+    || bearerToken
+    || (typeof queryToken === 'string' && queryToken.trim())
+    || '';
   const payload = req.body;
 
   if (!token) {
-    return res.status(401).json({ error: 'Missing security token' });
+    return res.status(401).json({ error: 'Missing security token. Send x-webhook-token header or Bearer token.' });
   }
 
   const logEntry = {

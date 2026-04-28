@@ -1,7 +1,8 @@
 import { createBrowserClient } from '@supabase/ssr';
+import { runtimeConfig } from '../app/lib/runtimeConfig';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://yghrnwlwfdadlnzhqhdp.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = runtimeConfig.supabaseUrl;
+const supabaseAnonKey = runtimeConfig.supabaseAnonKey;
 
 export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 

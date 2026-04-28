@@ -5,7 +5,6 @@ import { ExpenseList } from '../components/ExpenseList';
 import { AIInsights } from '../components/AIInsights';
 import { StatsCards } from '../components/StatsCards';
 import { SpendingChart } from '../components/SpendingChart';
-import { VoiceExpenseInput } from '../components/VoiceExpenseInput';
 import { ForecastCard } from '../components/ForecastCard';
 import { SavingsAdvisor } from '../components/SavingsAdvisor';
 import { FinancialTicker } from '../components/FinancialTicker';
@@ -48,7 +47,7 @@ export default function Dashboard() {
   const [dateFilter, setDateFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
-  const [voicePrefillData, setVoicePrefillData] = useState<any>(null);
+  const [voicePrefillData, setVoicePrefillData] = useState<Record<string, unknown> | null>(null);
   const [unconfirmedCount, setUnconfirmedCount] = useState(0);
   const [trustScore, setTrustScore] = useState(100);
 
@@ -61,7 +60,16 @@ export default function Dashboard() {
   useEffect(() => {
     loadExpenses();
     window.addEventListener('expenseai:edge:expenses_updated', loadExpenses);
-    return () => window.removeEventListener('expenseai:edge:expenses_updated', loadExpenses);
+    const openFromVoice = (event: Event) => {
+      const custom = event as CustomEvent<Record<string, unknown>>;
+      setVoicePrefillData(custom.detail || {});
+      setIsAddExpenseOpen(true);
+    };
+    window.addEventListener('expenseai:voice:open-add', openFromVoice as EventListener);
+    return () => {
+      window.removeEventListener('expenseai:edge:expenses_updated', loadExpenses);
+      window.removeEventListener('expenseai:voice:open-add', openFromVoice as EventListener);
+    };
   }, []);
 
   useEffect(() => {
@@ -276,12 +284,6 @@ export default function Dashboard() {
               <Sparkles className="size-3.5" style={{ color: '#00d4aa' }} />
               {t('dashboard.ai_insights')}
             </div>
-            <VoiceExpenseInput
-              onTranscribed={(_text, data) => {
-                setVoicePrefillData({ ...data, source: 'voice' });
-                setIsAddExpenseOpen(true);
-              }}
-            />
             <AddExpenseDialog
               onExpenseAdded={loadExpenses}
               isOpen={isAddExpenseOpen}
