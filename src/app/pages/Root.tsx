@@ -44,6 +44,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { AIVoiceCapture } from '../components/AIVoiceCapture';
 import { AppLock } from '../components/AppLock';
 import { AICFO } from '../components/AICFO';
+import { AnimatedBackdrop } from '../components/AnimatedBackdrop';
 
 const navigation = [
   { name: 'nav.dashboard',     href: '/',             icon: LayoutDashboard },
@@ -132,7 +133,9 @@ export default function Root() {
     : (isRTL ? 'lg:pr-[72px]' : 'lg:pl-[72px]');
 
   return (
-    <div className="min-h-[100svh] bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-[100svh] bg-background relative overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+      <AnimatedBackdrop variant="app" />
+      <div className="relative z-10">
       <Toaster position="top-center" expand richColors />
 
       {/* ── Desktop Sidebar ─────────────────────────────────────────────── */}
@@ -460,6 +463,7 @@ export default function Root() {
       {/* AI CFO floating button — shown on mobile only (desktop uses the compact top-bar version) */}
       {isTouchLayout && <AICFO />}
       <AppLock />
+      </div>
     </div>
   );
 }

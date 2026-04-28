@@ -375,3 +375,133 @@
   border-color: rgba(0, 212, 170, 0.35);
   box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.10), var(--shadow-md);
 }
+
+/* ── Animated Wallpapers ───────────────────────────────────────────────── */
+@keyframes wallpaper-pan {
+  0% { transform: translate3d(-3%, -2%, 0) scale(1); }
+  50% { transform: translate3d(2%, 2%, 0) scale(1.04); }
+  100% { transform: translate3d(-3%, -2%, 0) scale(1); }
+}
+
+@keyframes wallpaper-float-a {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(40px, -24px, 0) scale(1.08); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes wallpaper-float-b {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-36px, 26px, 0) scale(1.04); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes wallpaper-float-c {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(18px, 32px, 0) scale(1.07); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+.animated-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.animated-backdrop__gradient {
+  position: absolute;
+  inset: -10%;
+  background:
+    radial-gradient(circle at 15% 25%, rgba(0, 212, 170, 0.24) 0%, transparent 45%),
+    radial-gradient(circle at 80% 15%, rgba(59, 130, 246, 0.18) 0%, transparent 40%),
+    radial-gradient(circle at 70% 80%, rgba(99, 102, 241, 0.15) 0%, transparent 48%),
+    linear-gradient(145deg, rgba(1, 16, 30, 0.16) 0%, rgba(8, 22, 40, 0.06) 100%);
+  animation: wallpaper-pan 18s ease-in-out infinite;
+}
+
+.animated-backdrop--login .animated-backdrop__gradient {
+  background:
+    radial-gradient(circle at 20% 22%, rgba(34, 211, 238, 0.27) 0%, transparent 44%),
+    radial-gradient(circle at 82% 18%, rgba(16, 185, 129, 0.20) 0%, transparent 42%),
+    radial-gradient(circle at 70% 82%, rgba(59, 130, 246, 0.18) 0%, transparent 46%),
+    linear-gradient(145deg, rgba(7, 20, 36, 0.30) 0%, rgba(10, 30, 50, 0.10) 100%);
+}
+
+.animated-backdrop__mesh {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 56px 56px;
+  opacity: 0.08;
+  mask-image: radial-gradient(circle at center, black 35%, transparent 85%);
+}
+
+.animated-backdrop--app .animated-backdrop__mesh {
+  opacity: 0.05;
+}
+
+.animated-backdrop__blob {
+  position: absolute;
+  width: 42vw;
+  height: 42vw;
+  max-width: 540px;
+  max-height: 540px;
+  min-width: 240px;
+  min-height: 240px;
+  border-radius: 999px;
+  filter: blur(44px);
+  opacity: 0.32;
+}
+
+.animated-backdrop__blob--a {
+  top: -14%;
+  left: -8%;
+  background: rgba(16, 185, 129, 0.38);
+  animation: wallpaper-float-a 12s ease-in-out infinite;
+}
+
+.animated-backdrop__blob--b {
+  top: -12%;
+  right: -10%;
+  background: rgba(14, 165, 233, 0.30);
+  animation: wallpaper-float-b 14s ease-in-out infinite;
+}
+
+.animated-backdrop__blob--c {
+  bottom: -22%;
+  left: 35%;
+  background: rgba(99, 102, 241, 0.28);
+  animation: wallpaper-float-c 16s ease-in-out infinite;
+}
+
+.animated-backdrop__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 50%, rgba(2, 6, 23, 0.22) 100%);
+}
+
+.dark .animated-backdrop__vignette {
+  background: radial-gradient(circle at center, transparent 45%, rgba(2, 6, 23, 0.45) 100%);
+}
+
+@media (max-width: 768px) {
+  .animated-backdrop__blob {
+    filter: blur(34px);
+    opacity: 0.28;
+  }
+  .animated-backdrop__mesh {
+    background-size: 44px 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated-backdrop__gradient,
+  .animated-backdrop__blob--a,
+  .animated-backdrop__blob--b,
+  .animated-backdrop__blob--c {
+    animation: none !important;
+  }
+}

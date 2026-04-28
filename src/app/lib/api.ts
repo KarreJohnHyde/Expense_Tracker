@@ -33,6 +33,48 @@ export interface Budget {
   period: string;
 }
 
+export interface FinanceNewsItem {
+  title: string;
+  link: string;
+  publishedAt: string;
+  source: string;
+}
+
+export interface FinanceMacroMetric {
+  key: string;
+  label: string;
+  value: string;
+  note: string;
+  raw?: number;
+  source?: string;
+}
+
+export interface FinanceIntelPayload {
+  asOf: string;
+  news: FinanceNewsItem[];
+  macro: FinanceMacroMetric[];
+  netWorth: {
+    combinedTop100Usd: number;
+    combinedTop100Formatted: string;
+    leaders: Array<{
+      name: string;
+      netWorthUsd: number;
+      netWorthFormatted: string;
+      country: string;
+    }>;
+    source: string;
+    asOf: string;
+  } | null;
+  resources: {
+    diamond: {
+      perCaratUsd: number;
+      source: string;
+    };
+  };
+  providerStatus?: Record<string, string>;
+  cache?: string;
+}
+
 // Simulated Fallbacks
 const STORAGE_KEYS = {
   EXPENSES: 'expenseai_expenses',
@@ -369,4 +411,27 @@ export const api = {
      return { scans };
   },
   exportData: async () => ({ success: true, data: getLocalExpenses() }),
+  getFinanceIntel: async (forceRefresh = false): Promise<FinanceIntelPayload> => {
+    const query = forceRefresh ? '?refresh=1' : '';
+    const candidates = [
+      `${PYTHON_API_URL}/market/news-macro${query}`,
+      `/market/news-macro${query}`,
+      `http://127.0.0.1:3001/market/news-macro${query}`,
+    ];
+
+    let lastError: unknown = null;
+    for (const url of candidates) {
+      try {
+        const resp = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!resp.ok) {
+          lastError = new Error(`Finance intel request failed at ${url} with ${resp.status}`);
+          continue;
+        }
+        return await resp.json();
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error('Finance intel request failed');
+  },
 };

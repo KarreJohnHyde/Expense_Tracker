@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { auth } from '../lib/auth';
 import { toast } from 'sonner';
 import { IndianRupee, Sparkles, TrendingUp, Shield, Zap } from 'lucide-react';
+import { AnimatedBackdrop } from '../components/AnimatedBackdrop';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -103,8 +104,9 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-500/10 via-blue-500/10 to-pink-500/10 flex items-center justify-center p-4">
-      <div className="w-full max-w-6xl grid md:grid-cols-2 gap-8 items-center">
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4">
+      <AnimatedBackdrop variant="login" />
+      <div className="relative z-10 w-full max-w-6xl grid md:grid-cols-2 gap-8 items-center">
         {/* Left side - Branding */}
         <div className="space-y-6 text-center md:text-left">
           <div className="flex items-center justify-center md:justify-start gap-3">
@@ -161,7 +163,7 @@ export default function Login() {
         </div>
 
         {/* Right side - Auth form */}
-        <Card className="w-full">
+        <Card className="w-full glass-card border-white/40">
           <CardHeader>
             <CardTitle>Welcome</CardTitle>
             <CardDescription>

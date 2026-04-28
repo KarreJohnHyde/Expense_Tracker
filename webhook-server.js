@@ -38,19 +38,219 @@ let serverStatus = 'starting';
 // ── Market Data Proxy Cache ─────────────────────────────────────────
 const MARKET_CACHE = new Map();
 const MARKET_CACHE_TTL = 15000; // 15 seconds
+const FINANCE_INTEL_CACHE_TTL = 3 * 60 * 1000; // 3 minutes
+const FINANCE_INTEL_CACHE_KEY = 'finance_intel';
+const DIAMOND_PRICE_PER_CARAT_USD = Number(process.env.DIAMOND_PRICE_PER_CARAT_USD || process.env.VITE_DIAMOND_PRICE_PER_CARAT_USD || 6200);
 
 function getMarketCache(key) {
   const entry = MARKET_CACHE.get(key);
   if (!entry) return null;
-  if (Date.now() - entry.timestamp > MARKET_CACHE_TTL) {
+  const ttl = Number(entry.ttl || MARKET_CACHE_TTL);
+  if (Date.now() - entry.timestamp > ttl) {
     MARKET_CACHE.delete(key);
     return null;
   }
   return entry.data;
 }
 
-function setMarketCache(key, data) {
-  MARKET_CACHE.set(key, { timestamp: Date.now(), data });
+function setMarketCache(key, data, ttl = MARKET_CACHE_TTL) {
+  MARKET_CACHE.set(key, { timestamp: Date.now(), data, ttl });
+}
+
+async function fetchWithTimeout(url, timeoutMs = 12000, init = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function decodeXmlEntities(value = '') {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .trim();
+}
+
+function extractTag(block, tagName) {
+  const regex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, 'i');
+  const matched = block.match(regex);
+  return decodeXmlEntities(matched?.[1] || '');
+}
+
+function parseRss(xml, maxItems = 10) {
+  const matches = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)];
+  return matches.slice(0, maxItems).map((match) => {
+    const item = match[1];
+    const title = extractTag(item, 'title').replace(/\s+/g, ' ');
+    const link = extractTag(item, 'link');
+    const pubDate = extractTag(item, 'pubDate');
+    const source = extractTag(item, 'source');
+    return {
+      title,
+      link,
+      publishedAt: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+      source: source || (link ? new URL(link).hostname.replace(/^www\./, '') : 'finance'),
+    };
+  }).filter((item) => item.title && item.link);
+}
+
+async function fetchGoogleFinanceNews() {
+  const queries = [
+    'finance stock market banking ecommerce gold silver platinum diamond gdp per capita income',
+    'nasdaq dow sp500 fed reserve rbi crude oil commodities macro economy',
+  ];
+
+  const jobs = queries.map(async (query) => {
+    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-IN&gl=IN&ceid=IN:en`;
+    const res = await fetchWithTimeout(url, 12000, { headers: { Accept: 'application/rss+xml, application/xml;q=0.9, */*;q=0.8' } });
+    if (!res.ok) throw new Error(`RSS request failed (${res.status})`);
+    const text = await res.text();
+    return parseRss(text, 8);
+  });
+
+  const settled = await Promise.allSettled(jobs);
+  const merged = [];
+  settled.forEach((entry) => {
+    if (entry.status === 'fulfilled') {
+      merged.push(...entry.value);
+    }
+  });
+
+  const deduped = Array.from(new Map(merged.map((item) => [item.link, item])).values());
+  return deduped
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+    .slice(0, 10);
+}
+
+function formatCompactNumber(value, fractionDigits = 1) {
+  return Number(value).toLocaleString('en-US', {
+    notation: 'compact',
+    maximumFractionDigits: fractionDigits,
+  });
+}
+
+async function fetchWorldBankMetric({ country, indicator, label, type = 'percent', note }) {
+  const url = `https://api.worldbank.org/v2/country/${country}/indicator/${indicator}?format=json&per_page=60`;
+  const res = await fetchWithTimeout(url, 12000, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`World Bank request failed (${res.status})`);
+  const payload = await res.json();
+  const series = Array.isArray(payload?.[1]) ? payload[1] : [];
+  const latest = series.find((row) => row && row.value !== null && row.value !== undefined);
+  if (!latest) throw new Error(`No World Bank data for ${country}:${indicator}`);
+  const raw = Number(latest.value);
+
+  let value = String(raw);
+  if (type === 'percent') value = `${raw.toFixed(1)}%`;
+  if (type === 'currency') value = `$${raw.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+  if (type === 'number') value = raw.toLocaleString('en-US');
+
+  return {
+    key: `${country}_${indicator}`,
+    label,
+    value,
+    note: `${note} (${latest.date})`,
+    raw,
+    source: 'World Bank',
+  };
+}
+
+async function fetchNetWorthSnapshot() {
+  const url = 'https://www.forbes.com/forbesapi/person/rtb/0/position/true.json?fields=personName,finalWorth,countryOfCitizenship,industries';
+  const res = await fetchWithTimeout(url, 12000, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`Forbes request failed (${res.status})`);
+  const payload = await res.json();
+  const people = Array.isArray(payload?.personList?.personsLists) ? payload.personList.personsLists : [];
+  const top = people.slice(0, 100);
+  const totalBillions = top.reduce((sum, person) => {
+    const amount = Number(person?.finalWorth || 0);
+    return sum + (Number.isFinite(amount) ? amount : 0);
+  }, 0);
+
+  return {
+    combinedTop100Usd: Math.round(totalBillions * 1e9),
+    combinedTop100Formatted: `$${formatCompactNumber(totalBillions, 2)}B`,
+    leaders: top.slice(0, 5).map((person) => ({
+      name: person.personName || 'Unknown',
+      netWorthUsd: Math.round(Number(person.finalWorth || 0) * 1e9),
+      netWorthFormatted: `$${Number(person.finalWorth || 0).toFixed(1)}B`,
+      country: person.countryOfCitizenship || 'N/A',
+    })),
+    source: 'Forbes Real-Time Billionaires',
+    asOf: new Date().toISOString(),
+  };
+}
+
+async function buildFinanceIntelPayload() {
+  const [newsResult, macroResult, netWorthResult] = await Promise.allSettled([
+    fetchGoogleFinanceNews(),
+    Promise.all([
+      fetchWorldBankMetric({
+        country: 'WLD',
+        indicator: 'NY.GDP.MKTP.KD.ZG',
+        label: 'World GDP Growth',
+        type: 'percent',
+        note: 'Annual growth',
+      }),
+      fetchWorldBankMetric({
+        country: 'IN',
+        indicator: 'NY.GDP.MKTP.KD.ZG',
+        label: 'India GDP Growth',
+        type: 'percent',
+        note: 'Annual growth',
+      }),
+      fetchWorldBankMetric({
+        country: 'US',
+        indicator: 'NY.GDP.MKTP.KD.ZG',
+        label: 'US GDP Growth',
+        type: 'percent',
+        note: 'Annual growth',
+      }),
+      fetchWorldBankMetric({
+        country: 'IN',
+        indicator: 'NY.GDP.PCAP.CD',
+        label: 'India Per-Capita Income',
+        type: 'currency',
+        note: 'Current US$',
+      }),
+      fetchWorldBankMetric({
+        country: 'US',
+        indicator: 'NY.GDP.PCAP.CD',
+        label: 'US Per-Capita Income',
+        type: 'currency',
+        note: 'Current US$',
+      }),
+    ]),
+    fetchNetWorthSnapshot(),
+  ]);
+
+  const macro = macroResult.status === 'fulfilled' ? macroResult.value : [];
+  const news = newsResult.status === 'fulfilled' && newsResult.value.length > 0 ? newsResult.value : [];
+  const netWorth = netWorthResult.status === 'fulfilled' ? netWorthResult.value : null;
+
+  return {
+    asOf: new Date().toISOString(),
+    news,
+    macro,
+    netWorth,
+    resources: {
+      diamond: {
+        perCaratUsd: DIAMOND_PRICE_PER_CARAT_USD,
+        source: process.env.DIAMOND_PRICE_PER_CARAT_USD ? 'env' : 'default',
+      },
+    },
+    providerStatus: {
+      news: newsResult.status,
+      macro: macroResult.status,
+      netWorth: netWorthResult.status,
+    },
+  };
 }
 
 app.use(cors({ origin: '*' }));
@@ -144,6 +344,43 @@ app.get('/time_series', async (req, res) => {
     return res.json(data);
   } catch (err) {
     return res.status(500).json({ status: 'error', message: err.message || 'Market data error' });
+  }
+});
+
+app.get('/market/news-macro', async (req, res) => {
+  const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
+  const cached = !forceRefresh ? getMarketCache(FINANCE_INTEL_CACHE_KEY) : null;
+  if (cached) {
+    res.set('Cache-Control', 'no-store');
+    return res.json({ ...cached, cache: 'hit' });
+  }
+
+  try {
+    const payload = await buildFinanceIntelPayload();
+    setMarketCache(FINANCE_INTEL_CACHE_KEY, payload, FINANCE_INTEL_CACHE_TTL);
+    res.set('Cache-Control', 'no-store');
+    return res.json({ ...payload, cache: 'miss' });
+  } catch (err) {
+    const fallback = {
+      asOf: new Date().toISOString(),
+      news: [],
+      macro: [],
+      netWorth: null,
+      resources: {
+        diamond: {
+          perCaratUsd: DIAMOND_PRICE_PER_CARAT_USD,
+          source: process.env.DIAMOND_PRICE_PER_CARAT_USD ? 'env' : 'default',
+        },
+      },
+      providerStatus: {
+        news: 'rejected',
+        macro: 'rejected',
+        netWorth: 'rejected',
+      },
+      cache: 'miss',
+      error: err.message || 'Failed to fetch finance intelligence',
+    };
+    return res.status(502).json(fallback);
   }
 });
 
