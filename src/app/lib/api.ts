@@ -423,7 +423,12 @@ export const api = {
     let lastError: unknown = null;
     for (const url of candidates) {
       try {
-        const resp = await fetch(url, { headers: { Accept: 'application/json' } });
+        const resp = await fetch(url, { 
+          headers: { 
+            Accept: 'application/json',
+            'ngrok-skip-browser-warning': 'true'
+          } 
+        });
         if (!resp.ok) {
           lastError = new Error(`Finance intel request failed at ${url} with ${resp.status}`);
           continue;

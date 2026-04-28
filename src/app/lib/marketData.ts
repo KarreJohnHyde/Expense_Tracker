@@ -77,7 +77,10 @@ async function fetchJson(path: string, params: Record<string, string | number | 
   }
 
   const response = await fetch(url.toString(), {
-    headers: { 'Accept': 'application/json' },
+    headers: { 
+      'Accept': 'application/json',
+      'ngrok-skip-browser-warning': 'true'
+    },
   });
   const data = await response.json().catch(() => ({}));
 
