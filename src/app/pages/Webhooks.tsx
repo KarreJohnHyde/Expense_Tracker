@@ -55,7 +55,10 @@ export default function Webhooks() {
 
   const checkServerStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${WEBHOOK_BASE_URL}/api/webhook-info`, { cache: 'no-store' });
+      const res = await fetch(`${WEBHOOK_BASE_URL}/api/webhook-info`, { 
+        cache: 'no-store',
+        headers: { 'ngrok-skip-browser-warning': 'true' }
+      });
       const data = await res.json();
       if (data && data.url) setBaseUrl(data.url);
       setServerStatus('online');
@@ -73,7 +76,10 @@ export default function Webhooks() {
   const fetchLogs = async () => {
     setLogsLoading(true);
     try {
-      const res = await fetch(`${WEBHOOK_BASE_URL}/api/webhook-logs`, { cache: 'no-store' });
+      const res = await fetch(`${WEBHOOK_BASE_URL}/api/webhook-logs`, { 
+        cache: 'no-store',
+        headers: { 'ngrok-skip-browser-warning': 'true' }
+      });
       const data = await res.json();
       setLogs(data.logs || []);
     } catch {
