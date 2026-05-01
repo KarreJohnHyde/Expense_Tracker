@@ -35,7 +35,7 @@ export function ForecastCard({ expenses }: ForecastCardProps) {
   const budgetUsedPercent = Math.min(100, (totalSpent / projectedTotal) * 100);
 
   return (
-    <Card className="h-full border-primary/20 bg-primary/5 overflow-hidden relative">
+    <Card className="h-full border border-gray-200 dark:border-primary/20 bg-white dark:bg-card shadow-sm overflow-hidden relative">
       <div className="absolute top-0 right-0 p-4 opacity-10">
          <Sparkles className="size-20 text-primary" />
       </div>
@@ -53,8 +53,8 @@ export function ForecastCard({ expenses }: ForecastCardProps) {
            <span className="text-3xl font-bold tracking-tight">
               {formatCurrency(projectedTotal)}
            </span>
-           <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <TrendingUp className="size-3 text-emerald-500" />
+           <span className="text-xs text-slate-600 dark:text-muted-foreground flex items-center gap-1">
+              <TrendingUp className="size-3 text-emerald-600 dark:text-emerald-500" />
               Projected based on ₹{dailyAverage.toFixed(0)} daily average
            </span>
         </div>
@@ -62,33 +62,33 @@ export function ForecastCard({ expenses }: ForecastCardProps) {
         <div className="space-y-4">
            <div className="space-y-1.5">
               <div className="flex justify-between text-xs">
-                 <span className="text-muted-foreground">Month Progress</span>
-                 <span className="font-medium text-emerald-600">{dayOfMonth} / {daysInMonth} Days Passed</span>
+                 <span className="text-slate-600 dark:text-muted-foreground">Month Progress</span>
+                 <span className="font-medium text-emerald-700 dark:text-emerald-600">{dayOfMonth} / {daysInMonth} Days Passed</span>
               </div>
               <Progress value={progressPercent} className="h-1.5 bg-emerald-100 dark:bg-emerald-900/20" />
            </div>
 
            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 rounded-xl border bg-card">
-                 <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Safe to Spend Daily</p>
-                 <p className="text-lg font-bold text-emerald-600">
+              <div className="p-3 rounded-xl border border-gray-200 dark:border-border bg-slate-50 dark:bg-card shadow-sm">
+                 <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-muted-foreground mb-1">Safe to Spend Daily</p>
+                 <p className="text-lg font-bold text-emerald-700 dark:text-emerald-600">
                     {formatCurrency(dailyAverage * 0.9)} 
                  </p>
               </div>
-              <div className="p-3 rounded-xl border bg-card">
-                 <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Expected Delta</p>
-                 <p className="text-lg font-bold">
+              <div className="p-3 rounded-xl border border-gray-200 dark:border-border bg-slate-50 dark:bg-card shadow-sm">
+                 <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-muted-foreground mb-1">Expected Delta</p>
+                 <p className="text-lg font-bold text-slate-900 dark:text-foreground">
                     +{formatCurrency(projectedTotal - totalSpent)}
                  </p>
               </div>
            </div>
         </div>
 
-        <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 flex items-start gap-3">
-           <Calendar className="size-4 text-primary mt-0.5" />
-           <p className="text-xs text-muted-foreground leading-relaxed">
-             If you maintain this pace, you will end the month with a total outlay of <span className="text-foreground font-bold">{formatCurrency(projectedTotal)}</span>. 
-             Reducing daily spend by 10% could save you <span className="text-emerald-600 font-bold">{formatCurrency(projectedTotal * 0.1)}</span>.
+        <div className="p-3 rounded-lg bg-emerald-50 dark:bg-primary/10 border border-emerald-100 dark:border-primary/20 flex items-start gap-3">
+           <Calendar className="size-4 text-emerald-600 dark:text-primary mt-0.5" />
+           <p className="text-xs text-slate-600 dark:text-muted-foreground leading-relaxed">
+             If you maintain this pace, you will end the month with a total outlay of <span className="text-slate-900 dark:text-foreground font-bold">{formatCurrency(projectedTotal)}</span>. 
+             Reducing daily spend by 10% could save you <span className="text-emerald-700 dark:text-emerald-600 font-bold">{formatCurrency(projectedTotal * 0.1)}</span>.
            </p>
         </div>
       </CardContent>

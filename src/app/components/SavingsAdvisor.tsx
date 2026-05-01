@@ -219,10 +219,7 @@ export function SavingsAdvisor({ expenses }: SavingsAdvisorProps) {
   const estimatedAnnualSavings = totalSpent * 0.15 * 12;
 
   return (
-    <Card className="h-full overflow-hidden relative group" style={{
-      background: 'linear-gradient(135deg, rgba(59,130,246,0.04) 0%, rgba(16,185,129,0.04) 50%, rgba(139,92,246,0.04) 100%)',
-      border: '1px solid rgba(59,130,246,0.15)',
-    }}>
+    <Card className="h-full border border-gray-200 dark:border-border/40 bg-white dark:bg-card shadow-sm overflow-hidden relative group">
       {/* Subtle animated background orb */}
       <div className="absolute -top-20 -right-20 w-48 h-48 rounded-full opacity-[0.07] group-hover:opacity-[0.12] transition-opacity duration-700"
         style={{ background: 'radial-gradient(circle, #3b82f6, transparent 70%)' }}
@@ -232,14 +229,14 @@ export function SavingsAdvisor({ expenses }: SavingsAdvisorProps) {
       />
 
       <CardHeader className="pb-2 relative z-10">
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <div className="p-1.5 rounded-lg" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}>
+        <CardTitle className="flex items-center gap-2 text-lg text-slate-900 dark:text-foreground">
+          <div className="p-1.5 rounded-lg bg-blue-500 text-white shadow-sm">
             <Brain className="size-4 text-white" />
           </div>
           AI Savings Advisor
           <PulseDot color="#10b981" />
         </CardTitle>
-        <CardDescription className="flex items-center gap-1.5 text-foreground/70 font-medium">
+        <CardDescription className="flex items-center gap-1.5 text-slate-600 dark:text-foreground/70 font-medium">
           <Sparkles className="size-3 text-amber-500" />
           Machine learning insights into your lifestyle
         </CardDescription>
@@ -251,7 +248,7 @@ export function SavingsAdvisor({ expenses }: SavingsAdvisorProps) {
           <GaugeRing score={healthScore} size={100} />
           <div className="flex-1 space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-foreground/70">Financial Health</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 dark:text-foreground/70">Financial Health</span>
               <Badge
                 variant={healthScore > 80 ? 'default' : 'secondary'}
                 className={`text-[10px] ${healthScore > 80 ? 'bg-emerald-500/90 hover:bg-emerald-500' : ''}`}
@@ -260,7 +257,7 @@ export function SavingsAdvisor({ expenses }: SavingsAdvisorProps) {
                 {healthScore > 80 ? '✦ Excellent' : healthScore > 60 ? 'On Track' : '⚠ Needs Review'}
               </Badge>
             </div>
-            <p className="text-xs text-foreground/80 leading-relaxed font-medium">
+            <p className="text-xs text-slate-700 dark:text-foreground/80 leading-relaxed font-medium">
               {healthScore > 80
                 ? 'Your spending patterns show strong financial discipline.'
                 : healthScore > 60
@@ -271,7 +268,7 @@ export function SavingsAdvisor({ expenses }: SavingsAdvisorProps) {
         </div>
 
         {/* ── Expenditure Split Bars ───────────────────────────────────── */}
-        <div className="p-3 rounded-xl border border-border/30 bg-background/80 shadow-sm space-y-2.5">
+        <div className="p-3 rounded-xl border border-gray-200 dark:border-border/30 bg-slate-50 dark:bg-background/80 shadow-sm space-y-2.5">
           <div className="flex justify-between items-center">
             <span className="text-xs font-semibold">Expenditure Split</span>
             <span className="text-[10px] font-bold text-blue-500 italic px-2 py-0.5 rounded-full bg-blue-500/10">
@@ -295,27 +292,21 @@ export function SavingsAdvisor({ expenses }: SavingsAdvisorProps) {
 
         {/* ── AI Advice Card ───────────────────────────────────────────── */}
         <div
-          className="p-4 rounded-xl relative cursor-pointer hover:scale-[1.01] transition-transform duration-300 mt-4"
-          style={{
-            background: 'linear-gradient(135deg, rgba(59,130,246,0.06) 0%, rgba(139,92,246,0.06) 100%)',
-            border: '1px dashed rgba(59,130,246,0.3)',
-          }}
+          className="p-4 rounded-xl relative cursor-pointer hover:shadow-lg transition-all duration-300 mt-4 bg-slate-50 dark:bg-card/40 border border-gray-200 dark:border-blue-500/30"
           onClick={() => setShowTip(!showTip)}
         >
-          <div className="absolute -top-3 left-4 bg-background px-2.5 py-0.5 rounded-full z-10 shadow-sm" style={{
-            border: '1px solid rgba(59,130,246,0.25)',
-          }}>
+          <div className="absolute -top-3 left-4 bg-white dark:bg-background px-2.5 py-0.5 rounded-full z-10 shadow-sm border border-gray-200 dark:border-blue-500/25">
             <div className="flex items-center gap-1">
               <AdviceIcon className="size-3.5" style={{ color: advice.iconColor }} />
               <span className="text-[10px] font-bold tracking-wide" style={{ color: advice.iconColor }}>AI INSIGHT</span>
             </div>
           </div>
-          <p className="font-bold text-sm mb-1 mt-1 text-foreground">{advice.title}</p>
-          <p className="text-xs text-foreground/80 leading-relaxed font-medium">{advice.message}</p>
+          <p className="font-bold text-sm mb-1 mt-1 text-slate-900 dark:text-foreground">{advice.title}</p>
+          <p className="text-xs text-slate-700 dark:text-foreground/80 leading-relaxed font-medium">{advice.message}</p>
 
           {showTip && (
-            <div className="mt-3 p-3 rounded-lg bg-card border border-border/40 animate-fade-in-up text-xs text-foreground/80">
-              <p className="font-semibold text-foreground mb-1">💡 Pro Tip</p>
+            <div className="mt-3 p-3 rounded-lg bg-white dark:bg-card border border-gray-200 dark:border-border/40 animate-fade-in-up text-xs text-slate-700 dark:text-foreground/80 shadow-sm">
+              <p className="font-semibold text-slate-900 dark:text-foreground mb-1">💡 Pro Tip</p>
               <p className="font-medium">Track every expense for 30 days to get a complete picture. Even small daily purchases add up significantly over a year.</p>
             </div>
           )}
@@ -327,7 +318,7 @@ export function SavingsAdvisor({ expenses }: SavingsAdvisorProps) {
         </div>
 
         {/* ── Strategy Carousel ────────────────────────────────────────── */}
-        <div className="relative overflow-hidden rounded-xl border border-border/30 bg-background/80 shadow-sm">
+        <div className="relative overflow-hidden rounded-xl border border-gray-200 dark:border-border/30 bg-slate-50 dark:bg-background/80 shadow-sm">
           <div className="flex transition-transform duration-500 ease-in-out"
             style={{ transform: `translateX(-${activeStrategy * 100}%)` }}
           >
@@ -339,8 +330,8 @@ export function SavingsAdvisor({ expenses }: SavingsAdvisorProps) {
                     <StratIcon className="size-4 text-primary" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-bold truncate">{strategy.label}</p>
-                    <p className="text-[11px] text-foreground/70 leading-snug font-medium">{strategy.desc}</p>
+                    <p className="text-xs font-bold text-slate-900 dark:text-foreground truncate">{strategy.label}</p>
+                    <p className="text-[11px] text-slate-600 dark:text-foreground/70 leading-snug font-medium">{strategy.desc}</p>
                   </div>
                 </div>
               );
@@ -363,13 +354,9 @@ export function SavingsAdvisor({ expenses }: SavingsAdvisorProps) {
         </div>
 
         {/* ── Annual Potential ──────────────────────────────────────────── */}
-        <div className="flex gap-3 items-center p-3 rounded-xl transition-colors hover:bg-emerald-500/5"
-          style={{ border: '1px solid rgba(16,185,129,0.15)' }}
-        >
-          <div className="p-2.5 rounded-xl" style={{
-            background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(16,185,129,0.05))',
-          }}>
-            <Wallet className="size-5 text-emerald-600" />
+        <div className="flex gap-3 items-center p-3 rounded-xl transition-colors hover:shadow-md bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-100 dark:border-emerald-500/15">
+          <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-500/10">
+            <Wallet className="size-5 text-emerald-700 dark:text-emerald-600" />
           </div>
           <div className="flex-1">
             <p className="text-[11px] font-semibold text-emerald-900/70 dark:text-emerald-100/70">Estimated Annual Potential</p>

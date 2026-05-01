@@ -2,7 +2,7 @@
 /* ── Design Tokens ─────────────────────────────────────────────────────── */
 :root {
   /* Base palette — high-contrast glassmorphism light */
-  --background:            #f0f2f5;
+  --background:            #f8fafc;
   --foreground:            #0a0a0f;
   --card:                  rgba(255, 255, 255, 0.75);
   --card-foreground:       #0a0a0f;
@@ -432,14 +432,25 @@
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
   background-size: 56px 56px;
-  opacity: 0.08;
+  opacity: 0.04;
   mask-image: radial-gradient(circle at center, black 35%, transparent 85%);
 }
 
+.dark .animated-backdrop__mesh {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  opacity: 0.08;
+}
+
 .animated-backdrop--app .animated-backdrop__mesh {
+  opacity: 0.02;
+}
+
+.dark .animated-backdrop--app .animated-backdrop__mesh {
   opacity: 0.05;
 }
 
@@ -453,6 +464,10 @@
   min-height: 240px;
   border-radius: 999px;
   filter: blur(44px);
+  opacity: 0.12;
+}
+
+.dark .animated-backdrop__blob {
   opacity: 0.32;
 }
 
