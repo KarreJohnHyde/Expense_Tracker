@@ -19,7 +19,7 @@ export const runtimeConfig = {
   supabaseAnonKey: (env.VITE_SUPABASE_ANON_KEY || '').trim() || 'mock-key',
   pythonApiUrl: normalizeUrl(env.VITE_PYTHON_API_URL) || 'http://127.0.0.1:3000',
   edgeApiUrl: normalizeUrl(env.VITE_API_URL) || functionsUrlFromSupabase,
-  webhookBaseUrl: normalizeUrl(env.VITE_WEBHOOK_BASE_URL) || functionsUrlFromSupabase || localApi,
+  webhookBaseUrl: normalizeUrl(env.VITE_WEBHOOK_BASE_URL || env.VITE_API_URL) || functionsUrlFromSupabase || localApi,
   ocrApiUrl: normalizeUrl(env.VITE_OCR_API_URL) || localApi,
   marketApiBase: normalizeUrl(env.VITE_MARKET_API_BASE),
   apiMode: (env.VITE_API_MODE || '').trim(),
