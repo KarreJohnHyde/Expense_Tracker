@@ -253,7 +253,10 @@ async function buildFinanceIntelPayload() {
   };
 }
 
-app.use(cors({ origin: '*' }));
+app.use(cors({ 
+  origin: '*',
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-webhook-token', 'x-api-key', 'ngrok-skip-browser-warning']
+}));
 app.use(express.json({ limit: '10mb' }));
 
 // ── Middleware: Request logging ──────────────────────────────────────

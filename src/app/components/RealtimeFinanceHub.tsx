@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowUpRight, ArrowDownRight, ExternalLink, Landmark, Newspaper, ShoppingBag, Waves } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, ExternalLink, Landmark, Newspaper, ShoppingBag, Waves, RefreshCw, Globe, TrendingUp, Gem, BarChart3 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { fetchQuotes, getMarketStatus, type QuoteData } from '../lib/marketData';
 import { api } from '../lib/api';
+import { GlobalCurrencyExchange } from './GlobalCurrencyExchange';
 
 type Segment = 'indices' | 'stocks' | 'ecommerce' | 'banking' | 'resources';
 
@@ -314,12 +315,22 @@ export function RealtimeFinanceHub() {
   ];
 
   return (
-    <Card className="border-border/40 overflow-hidden">
+    <Card className="border-border/40 overflow-hidden relative" style={{
+      background: 'linear-gradient(180deg, rgba(16,185,129,0.02) 0%, transparent 30%)',
+    }}>
+      {/* Decorative corner glow */}
+      <div className="absolute -top-24 -right-24 w-48 h-48 rounded-full opacity-[0.04]" style={{ background: 'radial-gradient(circle, #10b981, transparent 70%)' }} />
+
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <CardTitle className="text-base">Realtime Finance Dashboard</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
+            <CardTitle className="text-base flex items-center gap-2">
+              <div className="p-1.5 rounded-lg" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+                <BarChart3 className="size-4 text-white" />
+              </div>
+              Realtime Finance Dashboard
+            </CardTitle>
+            <p className="text-xs text-foreground/70 font-medium mt-1">
               Finance, stock market, e-commerce, banking, natural resources, metals, GDP and net-worth snapshots
             </p>
           </div>
@@ -336,6 +347,7 @@ export function RealtimeFinanceHub() {
               }}
               disabled={loadingMarket}
             >
+              <RefreshCw className={`size-3.5 mr-1.5 ${loadingMarket ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
@@ -343,14 +355,19 @@ export function RealtimeFinanceHub() {
       </CardHeader>
 
       <CardContent className="space-y-5">
+        {/* Index Tiles */}
         <div className="flex flex-wrap gap-2">
           {(['nasdaq', 'dow', 'sp500', 'ftse'] as const).map((id) => {
             const tile = MARKET_TILES.find((item) => item.id === id)!;
             const value = tiles[id];
             const up = value.changePercent >= 0;
             return (
-              <div key={id} className="rounded-xl border border-border/50 px-3 py-2 min-w-[170px] bg-muted/20">
-                <div className="text-[11px] font-semibold text-muted-foreground">{tile.label}</div>
+              <div key={id} className="rounded-xl border border-border/50 px-3 py-2.5 min-w-[170px] flex-1 transition-all duration-200 hover:shadow-md hover:border-border/80 cursor-default group bg-background/40 shadow-sm" style={{
+                background: up
+                  ? 'linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(16,185,129,0.02) 100%)'
+                  : 'linear-gradient(135deg, rgba(239,68,68,0.06) 0%, rgba(239,68,68,0.02) 100%)',
+              }}>
+                <div className="text-[11px] font-semibold text-foreground/70 group-hover:text-foreground/90 transition-colors">{tile.label}</div>
                 <div className="text-sm font-bold mt-0.5">{formatPrice(tile, value.price)}</div>
                 <div className={`text-xs mt-0.5 inline-flex items-center gap-1 ${up ? 'text-green-600' : 'text-red-600'}`}>
                   {up ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />}
@@ -380,15 +397,18 @@ export function RealtimeFinanceHub() {
                       const value = tiles[tile.id];
                       const up = value.changePercent >= 0;
                       return (
-                        <div key={tile.id} className="rounded-xl border border-border/50 p-3 bg-card/70">
+                        <div key={tile.id} className="rounded-xl border border-border/50 p-3 bg-card/70 hover:bg-card/90 hover:border-border/80 hover:shadow-sm transition-all duration-200 cursor-default group">
                           <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="font-semibold text-sm">{tile.label}</p>
-                              <p className="text-[11px] text-muted-foreground">{tile.symbol || 'Reference series'}</p>
+                            <div className="flex items-center gap-3">
+                              <div className={`w-1 h-8 rounded-full shrink-0 ${up ? 'bg-green-500' : 'bg-red-500'}`} style={{ opacity: 0.6 }} />
+                              <div>
+                                <p className="font-semibold text-sm group-hover:text-primary transition-colors">{tile.label}</p>
+                                <p className="text-[11px] text-foreground/70 font-medium">{tile.symbol || 'Reference series'}</p>
+                              </div>
                             </div>
                             <div className="text-right">
                               <p className="text-sm font-bold">{formatPrice(tile, value.price)}</p>
-                              <p className={`text-xs inline-flex items-center gap-1 ${up ? 'text-green-600' : 'text-red-600'}`}>
+                              <p className={`text-xs inline-flex items-center gap-1 font-semibold ${up ? 'text-green-600' : 'text-red-600'}`}>
                                 {up ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />}
                                 {up ? '+' : ''}{value.changePercent.toFixed(2)}%
                               </p>
@@ -404,37 +424,46 @@ export function RealtimeFinanceHub() {
           </div>
 
           <div className="lg:col-span-4 space-y-3">
-            <div className="rounded-xl border border-border/50 p-3 bg-muted/20">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Gold Rates (USD / gram)</p>
+            {/* Gold Rates */}
+            <div className="rounded-xl border border-amber-500/20 p-3 hover:border-amber-500/30 transition-colors bg-background/50 shadow-sm" style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.05) 0%, transparent 100%)' }}>
+              <p className="text-xs font-semibold text-amber-900/70 dark:text-amber-100/70 uppercase tracking-wide flex items-center gap-1.5">
+                <span className="text-amber-500">✦</span> Gold Rates (USD / gram)
+              </p>
               <div className="mt-2 space-y-1.5">
                 {goldRates.map((rate) => (
-                  <div key={rate.karat} className="flex items-center justify-between text-sm">
-                    <span>{rate.karat}</span>
-                    <span className="font-semibold">${rate.value.toFixed(2)}</span>
+                  <div key={rate.karat} className="flex items-center justify-between text-sm p-1.5 rounded-lg hover:bg-amber-500/5 transition-colors">
+                    <span className="font-medium">{rate.karat}</span>
+                    <span className="font-bold text-amber-700 dark:text-amber-400">${rate.value.toFixed(2)}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="rounded-xl border border-border/50 p-3 bg-muted/20">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Diamond (Per Carat)</p>
+            {/* Diamond */}
+            <div className="rounded-xl border border-blue-500/20 p-3 hover:border-blue-500/30 transition-colors bg-background/50 shadow-sm" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.05) 0%, transparent 100%)' }}>
+              <p className="text-xs font-semibold text-blue-900/70 dark:text-blue-100/70 uppercase tracking-wide flex items-center gap-1.5">
+                <Gem className="size-3 text-blue-500" /> Diamond (Per Carat)
+              </p>
               <div className="mt-2 flex items-end justify-between">
                 <div>
                   <p className="text-lg font-bold">${diamondPerCaratUsd.toLocaleString('en-US')}</p>
-                  <p className="text-[11px] text-muted-foreground">Reference market price</p>
+                  <p className="text-[11px] text-blue-900/60 dark:text-blue-100/60 font-medium">Reference market price</p>
                 </div>
                 <Badge variant="outline">Configurable</Badge>
               </div>
             </div>
 
-            <div className="rounded-xl border border-border/50 p-3 bg-muted/20">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Macro Snapshot</p>
+            {/* Macro Snapshot */}
+            <div className="rounded-xl border border-purple-500/20 p-3 hover:border-purple-500/30 transition-colors bg-background/50 shadow-sm" style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.05) 0%, transparent 100%)' }}>
+              <p className="text-xs font-semibold text-purple-900/70 dark:text-purple-100/70 uppercase tracking-wide flex items-center gap-1.5">
+                <TrendingUp className="size-3 text-purple-500" /> Macro Snapshot
+              </p>
               <div className="mt-2 space-y-2">
                 {macroMetrics.slice(0, 4).map((metric) => (
-                  <div key={metric.label} className="flex items-start justify-between gap-3">
+                  <div key={metric.label} className="flex items-start justify-between gap-3 p-1.5 rounded-lg hover:bg-purple-500/5 transition-colors">
                     <div>
-                      <p className="text-[12px] font-medium">{metric.label}</p>
-                      <p className="text-[10px] text-muted-foreground">{metric.note}</p>
+                      <p className="text-[12px] font-semibold text-foreground/80">{metric.label}</p>
+                      <p className="text-[10px] text-foreground/60 font-medium">{metric.note}</p>
                     </div>
                     <span className="text-sm font-bold">{metric.value}</span>
                   </div>
@@ -479,13 +508,16 @@ export function RealtimeFinanceHub() {
 
         <div className="grid gap-2 md:grid-cols-4">
           {[...macroMetrics.slice(4), ...(netWorthMetric ? [netWorthMetric] : [])].map((metric) => (
-            <div key={metric.label} className="rounded-lg border border-border/50 p-3 bg-muted/15">
-              <p className="text-[11px] text-muted-foreground">{metric.label}</p>
-              <p className="text-lg font-bold mt-0.5">{metric.value}</p>
-              <p className="text-[10px] text-muted-foreground mt-1">{metric.note}</p>
+            <div key={metric.label} className="rounded-lg border border-border/50 p-3 bg-background/60 shadow-sm hover:bg-background/80 hover:border-border/70 transition-all duration-200 cursor-default">
+              <p className="text-[11px] text-foreground/70 font-semibold">{metric.label}</p>
+              <p className="text-lg font-bold mt-0.5 text-foreground">{metric.value}</p>
+              <p className="text-[10px] text-foreground/60 font-medium mt-1">{metric.note}</p>
             </div>
           ))}
         </div>
+
+        {/* Global Currency Exchange */}
+        <GlobalCurrencyExchange />
       </CardContent>
     </Card>
   );
