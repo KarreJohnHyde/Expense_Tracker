@@ -118,7 +118,20 @@ export default function StockMarket() {
   const { formatCurrency } = useCurrency();
   const [stocks, setStocks] = useState<Stock[]>(STOCK_SEED);
   const [filteredStocks, setFilteredStocks] = useState<Stock[]>(STOCK_SEED);
-  const [portfolio, setPortfolio] = useState<Portfolio[]>([]);
+  const [portfolio, setPortfolio] = useState<Portfolio[]>(() => {
+    try {
+      const saved = localStorage.getItem('stock:portfolio');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Save portfolio on change
+  useEffect(() => {
+    localStorage.setItem('stock:portfolio', JSON.stringify(portfolio));
+  }, [portfolio]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState('All');
   const [selectedStock, setSelectedStock] = useState<Stock | null>(null);

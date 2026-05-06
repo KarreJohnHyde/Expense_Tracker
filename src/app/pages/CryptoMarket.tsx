@@ -99,7 +99,20 @@ export default function CryptoMarket() {
   const { formatCurrency } = useCurrency();
   const [cryptos, setCryptos] = useState<Crypto[]>(CRYPTO_SEED);
   const [filteredCryptos, setFilteredCryptos] = useState<Crypto[]>(CRYPTO_SEED);
-  const [portfolio, setPortfolio] = useState<Portfolio[]>([]);
+  const [portfolio, setPortfolio] = useState<Portfolio[]>(() => {
+    try {
+      const saved = localStorage.getItem('crypto:portfolio');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Save portfolio on change
+  useEffect(() => {
+    localStorage.setItem('crypto:portfolio', JSON.stringify(portfolio));
+  }, [portfolio]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState('All');
   const [selectedCrypto, setSelectedCrypto] = useState<Crypto | null>(null);
