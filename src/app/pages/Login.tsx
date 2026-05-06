@@ -76,6 +76,98 @@ export default function Login() {
       if (error) {
         toast.error('Demo login failed');
       } else if (user) {
+        // --- SEED DEMO DATA ---
+        
+        // 1. Expenses (Recent, Gallery, QR)
+        const demoExpenses = [
+          {
+            id: `exp_${Date.now()}_1`,
+            description: "Starbucks Coffee",
+            amount: 5.50,
+            category: "Food & Dining",
+            date: new Date().toISOString(),
+            paymentMethod: "Credit Card",
+            source: "manual"
+          },
+          {
+            id: `exp_${Date.now()}_2`,
+            description: "Uber Ride",
+            amount: 15.20,
+            category: "Transportation",
+            date: new Date(Date.now() - 86400000).toISOString(),
+            paymentMethod: "Debit Card",
+            source: "manual"
+          },
+          {
+            id: `exp_${Date.now()}_3`,
+            description: "Grocery Store",
+            amount: 65.40,
+            category: "Groceries",
+            date: new Date(Date.now() - 172800000).toISOString(),
+            paymentMethod: "Cash",
+            receiptImage: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+            source: "receipt_scan",
+            scanData: {
+              type: "ocr_receipt",
+              rawText: "Grocery Store\\nTotal: $65.40",
+              capturedAt: new Date(Date.now() - 172800000).toISOString()
+            }
+          },
+          {
+            id: `exp_${Date.now()}_4`,
+            description: "Concert Ticket (QR)",
+            amount: 120.00,
+            category: "Entertainment",
+            date: new Date(Date.now() - 259200000).toISOString(),
+            paymentMethod: "UPI",
+            receiptImage: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+            source: "qr_scan",
+            scanData: {
+              type: "qr",
+              rawText: "TICKET-120-CONCERT",
+              capturedAt: new Date(Date.now() - 259200000).toISOString()
+            }
+          }
+        ];
+        localStorage.setItem('expenseai_expenses', JSON.stringify(demoExpenses));
+
+        // 2. Stocks Portfolio
+        const demoStocks = [
+          { stockId: '1', symbol: 'TCS', name: 'Tata Consultancy Services', quantity: 10, buyPrice: 3400, currentPrice: 3450.50 },
+          { stockId: '3', symbol: 'RELIANCE', name: 'Reliance Industries', quantity: 5, buyPrice: 2400, currentPrice: 2456.80 }
+        ];
+        localStorage.setItem('stock:portfolio', JSON.stringify(demoStocks));
+
+        // 3. Crypto Portfolio
+        const demoCrypto = [
+          { cryptoId: '1', symbol: 'BTC', name: 'Bitcoin', quantity: 0.15, buyPrice: 60000, currentPrice: 65000 },
+          { cryptoId: '2', symbol: 'ETH', name: 'Ethereum', quantity: 2.5, buyPrice: 3000, currentPrice: 3450 }
+        ];
+        localStorage.setItem('crypto:portfolio', JSON.stringify(demoCrypto));
+
+        // 4. Forex / Currency Trading Positions
+        const demoForex = [
+          {
+            id: crypto.randomUUID(),
+            pair: 'EUR/USD',
+            type: 'buy',
+            entryRate: 1.0500,
+            currentRate: 1.0800,
+            amount: 1000,
+            timestamp: new Date(Date.now() - 86400000).toISOString()
+          },
+          {
+            id: crypto.randomUUID(),
+            pair: 'GBP/USD',
+            type: 'sell',
+            entryRate: 1.2800,
+            currentRate: 1.2650,
+            amount: 500,
+            timestamp: new Date(Date.now() - 172800000).toISOString()
+          }
+        ];
+        localStorage.setItem('forex:positions', JSON.stringify(demoForex));
+        
         toast.success('Logged in with demo account! 🎉');
         navigate('/');
       }
